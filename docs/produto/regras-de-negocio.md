@@ -13,9 +13,9 @@ Decisões tomadas com o responsável pelo produto em 13/07/2026:
 | D3 | Participante pode sair da mesa com consumo atribuído: ele fica marcado como "saiu" e **seu consumo e dívida permanecem** no fechamento. |
 | D4 | Itens sem dono no fechamento: a validação **pergunta** — dividir entre todos ou voltar e distribuir. Nada fecha com item órfão silencioso. |
 
-Decisões assumidas como padrão, **a ratificar na aprovação desta fase** (marcadas ⚠️ nas regras):
+Decisões padrão **ratificadas pelo responsável na aprovação da fase (13/07/2026)**:
 
-| # | Decisão assumida | Regra |
+| # | Decisão ratificada | Regra |
 |---|------------------|-------|
 | P1 | Apenas o criador (ou quem herdar o papel) inicia o fechamento e altera configurações da mesa. | RN-031 |
 | P2 | Se o criador sair, o papel passa ao participante ativo mais antigo. | RN-008 |
@@ -41,7 +41,7 @@ Decisões assumidas como padrão, **a ratificar na aprovação desta fase** (mar
 *Justificativa:* decisão D2; 10% é o costume brasileiro, mas há casas sem taxa ou com taxa embutida.
 *Exemplo:* consumo R$ 200,00 com taxa 10% → total da mesa R$ 220,00.
 
-**RN-005 — Estados da mesa.** ⚠️(P4) A mesa segue a máquina de estados `ABERTA → FECHANDO → FECHADA` (ver `maquina-de-estados.md`). `FECHADA` é terminal: somente leitura, exceto atualização de status de pagamentos (RN-052). Não há reabertura no MVP.
+**RN-005 — Estados da mesa.** (P4) A mesa segue a máquina de estados `ABERTA → FECHANDO → FECHADA` (ver `maquina-de-estados.md`). `FECHADA` é terminal: somente leitura, exceto atualização de status de pagamentos (RN-052). Não há reabertura no MVP.
 *Exemplo:* tentar adicionar item em mesa `FECHADA` → erro de domínio `MESA_NAO_ABERTA`.
 
 **RN-006 — Janela de edição.** Entrada de participantes, criação/edição/remoção de itens e alterações de distribuição só são aceitas com a mesa `ABERTA`.
@@ -52,7 +52,7 @@ Decisões assumidas como padrão, **a ratificar na aprovação desta fase** (mar
 **RN-007 — Entrada.** Para entrar, a pessoa informa um nome (1 a 30 caracteres, não vazio após trim), único entre os participantes da mesa (comparação sem diferenciar maiúsculas). Nome repetido → pedir outro.
 *Exemplo:* já existe "Ana"; segunda "ana" é rejeitada com sugestão ("Ana C.?").
 
-**RN-008 — Papéis.** ⚠️(P2) Todo participante é `CRIADOR` ou `MEMBRO`. Há sempre exatamente um criador ativo por mesa aberta: se o criador sair, o papel passa automaticamente ao participante **ativo** há mais tempo na mesa.
+**RN-008 — Papéis.** (P2) Todo participante é `CRIADOR` ou `MEMBRO`. Há sempre exatamente um criador ativo por mesa aberta: se o criador sair, o papel passa automaticamente ao participante **ativo** há mais tempo na mesa.
 *Justificativa:* alguém precisa poder fechar a mesa e ajustar configurações.
 *Exemplo:* criador sai às 22h; "Bruno", primeiro a ter entrado depois dele, vira criador.
 
@@ -74,7 +74,7 @@ Decisões assumidas como padrão, **a ratificar na aprovação desta fase** (mar
 **RN-022 — Modos de distribuição.** Cada parte de um item é atribuída em um de três modos: `TODOS` (participantes ativos, em partes iguais), `PESSOA` (um participante) ou `GRUPO` (subconjunto de participantes, em partes iguais ou ponderadas).
 *Exemplo:* "Tábua de frios" → GRUPO {Ana, Bruno, Caio} em partes iguais.
 
-**RN-023 — "Todos" é snapshot.** ⚠️(P3) A distribuição `TODOS` captura os participantes **ativos no momento da atribuição**. Quem entra depois não é incluído automaticamente; reatribuir é uma ação explícita (um toque).
+**RN-023 — "Todos" é snapshot.** (P3) A distribuição `TODOS` captura os participantes **ativos no momento da atribuição**. Quem entra depois não é incluído automaticamente; reatribuir é uma ação explícita (um toque).
 *Justificativa:* rodadas pedidas antes de alguém chegar não são dessa pessoa.
 *Exemplo:* 1ª rodada às 20h (4 pessoas) fica com 4; Dani chega 20h30 e só entra nas rodadas seguintes.
 
@@ -92,7 +92,7 @@ Decisões assumidas como padrão, **a ratificar na aprovação desta fase** (mar
 **RN-030 — Pré-condição.** O fechamento só pode ser iniciado com a mesa `ABERTA` e com pelo menos 1 participante e 1 item.
 *Exemplo:* mesa vazia → botão "Fechar conta" desabilitado.
 
-**RN-031 — Quem fecha.** ⚠️(P1) Apenas o participante com papel `CRIADOR` inicia o fechamento, altera taxa de serviço e modo de acerto.
+**RN-031 — Quem fecha.** (P1) Apenas o participante com papel `CRIADOR` inicia o fechamento, altera taxa de serviço e modo de acerto.
 *Exemplo:* membro vê o resumo, mas o botão "Fechar conta" só age para o criador.
 
 **RN-032 — Validação de itens sem dono.** Ao iniciar o fechamento, itens não (ou parcialmente) distribuídos são listados e o criador escolhe: **dividir a parte sem dono igualmente entre todos os participantes com consumo** ou **cancelar e voltar** para distribuir manualmente. Nada fecha com valor órfão silencioso.

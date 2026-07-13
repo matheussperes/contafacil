@@ -17,7 +17,7 @@ stateDiagram-v2
 |--------|-------------|-------------------|
 | `ABERTA` | Mesa viva | Entrar/sair, criar/editar/remover itens, distribuir, configurar taxa e modo (criador) |
 | `FECHANDO` | Fechamento em curso | **Nada** — mesa congelada para todos (RN-033); apenas o processo de fechamento age |
-| `FECHADA` | Conta fechada (terminal) | Leitura + atualização de status de pagamentos (RN-052). Sem reabertura (RN-005 ⚠️P4) |
+| `FECHADA` | Conta fechada (terminal) | Leitura + atualização de status de pagamentos (RN-052). Sem reabertura (RN-005/P4) |
 
 ### Transições
 
@@ -73,7 +73,7 @@ stateDiagram-v2
 ```
 
 - `SAIU` é terminal para aquela participação (I-P2): a mesma pessoa voltando entra como novo participante (novo nome ou nome liberado? o nome de quem saiu **permanece reservado** na mesa, pois segue no resumo — a pessoa que volta escolhe outro nome).
-- Ao sair, se o participante era `CRIADOR`, o papel migra na mesma operação para o ativo mais antigo (RN-008 ⚠️P2). Papel não é estado desta máquina, mas a migração é atômica com a transição.
+- Ao sair, se o participante era `CRIADOR`, o papel migra na mesma operação para o ativo mais antigo (RN-008/P2). Papel não é estado desta máquina, mas a migração é atômica com a transição.
 
 ## Relações entre as máquinas
 
