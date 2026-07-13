@@ -4,7 +4,7 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 
 | Fase | Nome | Status | Aprovada em |
 |------|------|--------|-------------|
-| 00 | Visão do Produto | ⬜ Não iniciada | — |
+| 00 | Visão do Produto | 📦 Entregue (aguardando aprovação) | — |
 | 01 | Arquitetura | ⬜ Não iniciada | — |
 | 02 | Banco de Dados | ⬜ Não iniciada | — |
 | 03 | Motor Matemático | ⬜ Não iniciada | — |
