@@ -5,8 +5,8 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | Fase | Nome | Status | Aprovada em |
 |------|------|--------|-------------|
 | 00 | Visão do Produto | ✅ Aprovada | 13/07/2026 |
-| 01 | Arquitetura | 📦 Entregue (aguardando aprovação) | — |
-| 02 | Banco de Dados | ⬜ Não iniciada | — |
+| 01 | Arquitetura | ✅ Aprovada | 13/07/2026 |
+| 02 | Banco de Dados | 📦 Entregue (aguardando aprovação) | — |
 | 03 | Motor Matemático | ⬜ Não iniciada | — |
 | 04 | Backend | ⬜ Não iniciada | — |
 | 05 | Realtime | ⬜ Não iniciada | — |

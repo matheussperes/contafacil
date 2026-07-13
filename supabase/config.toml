@@ -1,0 +1,4 @@
+# Configuração do Supabase CLI (mínima — FASE 02).
+# `supabase db reset` aplica supabase/migrations/ + supabase/seed.sql.
+# Ajustes de auth (anonymous sign-in) e ambientes entram nas FASES 04/13.
+project_id = "contafacil"
