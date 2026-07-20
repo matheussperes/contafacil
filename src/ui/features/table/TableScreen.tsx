@@ -22,6 +22,7 @@ import { useTableSnapshot } from '@/ui/hooks/useTableSnapshot'
 import { useTableView } from '@/ui/hooks/useTableView'
 import { canStartClosing } from '@/domain/entities/table-state'
 import { AddItemSheet } from '@/ui/features/table/AddItemSheet'
+import { ScannerSheet } from '@/ui/features/scanner/ScannerSheet'
 import { DistributionSheet } from '@/ui/features/distribution/DistributionSheet'
 import { ParticipantSummary } from '@/ui/features/distribution/ParticipantSummary'
 import { ClosingDialog } from '@/ui/features/closing/ClosingDialog'
@@ -39,6 +40,7 @@ export function TableScreen({ tableId }: { tableId: string }) {
   const view = useTableView(query.data, session?.participantId ?? null)
   const [addOpen, setAddOpen] = useState(false)
   const [distItem, setDistItem] = useState<Item | null>(null)
+  const [scanOpen, setScanOpen] = useState(false)
   const [closingOpen, setClosingOpen] = useState(false)
 
   if (query.isLoading) {
@@ -191,14 +193,17 @@ export function TableScreen({ tableId }: { tableId: string }) {
       {canEdit && (
         <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-md gap-2 border-t bg-[var(--color-surface)] p-3">
           <Button fullWidth onClick={() => setAddOpen(true)}>
-            Adicionar item
+            Item
+          </Button>
+          <Button variant="secondary" onClick={() => setScanOpen(true)}>
+            Escanear
           </Button>
           {canStartClosing(table, me, items.length, participants.length) ? (
             <Button variant="secondary" onClick={() => setClosingOpen(true)}>
-              Fechar conta
+              Fechar
             </Button>
           ) : (
-            <Button variant="secondary" onClick={leave}>
+            <Button variant="ghost" onClick={leave}>
               Sair
             </Button>
           )}
@@ -209,6 +214,15 @@ export function TableScreen({ tableId }: { tableId: string }) {
         <AddItemSheet
           open={addOpen}
           onClose={() => setAddOpen(false)}
+          tableId={tableId}
+          createdBy={me.id}
+        />
+      )}
+
+      {me && (
+        <ScannerSheet
+          open={scanOpen}
+          onClose={() => setScanOpen(false)}
           tableId={tableId}
           createdBy={me.id}
         />

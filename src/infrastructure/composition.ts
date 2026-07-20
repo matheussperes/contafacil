@@ -22,8 +22,10 @@ import { SupabasePaymentRepository } from '@/infrastructure/supabase/repositorie
 import { SupabaseRealtimeGateway } from '@/infrastructure/supabase/realtime/supabase-realtime-gateway'
 import { LocalDeviceStorage } from '@/infrastructure/storage/local-device-storage'
 import { ConsoleLogger } from '@/infrastructure/logging/console-logger'
+import { HttpNfceGateway } from '@/infrastructure/nfce/http-nfce-gateway'
 import type { TableGateway } from '@/application/ports/table-gateway'
 import type { RealtimeGateway } from '@/application/ports/realtime'
+import type { NfceGateway } from '@/application/ports/nfce-gateway'
 
 export interface Services {
   table: TableService
@@ -33,6 +35,7 @@ export interface Services {
   closing: ClosingService
   gateway: TableGateway
   realtime: RealtimeGateway
+  nfce: NfceGateway
   ensureSession: () => Promise<string>
 }
 
@@ -64,6 +67,7 @@ export function buildServices(deps?: {
     closing: new ClosingService(gateway, logger, assignments),
     gateway,
     realtime,
+    nfce: new HttpNfceGateway(),
     ensureSession: () => ensureAnonymousSession(client),
   }
 }
