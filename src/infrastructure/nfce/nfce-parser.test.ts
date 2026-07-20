@@ -81,6 +81,24 @@ const fixtureCarrefourReal = `
 </table>
 </body></html>`
 
+// Mesma nota real do Carrefour, mas com `&nbsp;` entre rótulo e valor no
+// bloco de totais — comum em portais de governo — e o bloco de totais
+// fora de qualquer <tr> (dentro de <div>s soltos), para cobrir o caso em
+// que a estrutura de tabela não se aplica aos totais.
+const fixtureEntidadesForaDeLinha = `
+<html><body>
+<div>Estado: SP</div>
+<table>
+  <tr><td>BALA GELAT FINI TUBE</td><td>Qtde.: 1</td><td>Vl. Unit.: 2,69</td><td>Vl. Total 2,69</td></tr>
+  <tr><td>BATATA OND CEB SALSA</td><td>Qtde.: 3</td><td>Vl. Unit.: 6,39</td><td>Vl. Total 19,17</td></tr>
+</table>
+<div class="totais">
+  <span>Valor&nbsp;total&nbsp;R$:&nbsp;21,86</span>
+  <span>Descontos&nbsp;R$:&nbsp;6,39</span>
+  <span>Valor&nbsp;a&nbsp;pagar&nbsp;R$:&nbsp;15,47</span>
+</div>
+</body></html>`
+
 describe('conversões (sem float)', () => {
   it('moneyToCents entende padrão BR e US', () => {
     expect(moneyToCents('15,90')).toBe(1590)
@@ -255,6 +273,19 @@ describe('desconto por item (RN-060) — item promocional', () => {
     expect(totals).toEqual([248, 1988, 856, 1105, 662, 1766, 856])
     const sum = totals.map((t) => t ?? 0).reduce((a, b) => a + b, 0)
     expect(sum).toBe(7481)
+  })
+
+  it('bloco de totais com &nbsp; e fora de <tr>: ainda encontra e rateia o desconto', () => {
+    const r = parseNfceHtml(fixtureEntidadesForaDeLinha)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.data.items).toHaveLength(2)
+
+    // 269 + 1917 = 2186 brutos; desconto 639 rateado por maior resto
+    const totals = r.data.items.map((i) => i.totalCents)
+    expect(totals).toEqual([190, 1357])
+    const sum = totals.map((t) => t ?? 0).reduce((a, b) => a + b, 0)
+    expect(sum).toBe(1547) // Valor a pagar R$: 15,47
   })
 
   it('efeito fim a fim: preço a cobrar da batata reflete o rateio', () => {

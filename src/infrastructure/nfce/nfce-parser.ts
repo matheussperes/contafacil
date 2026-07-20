@@ -58,6 +58,35 @@ function extractUf(html: string): string | null {
   return m?.[1]?.toUpperCase() ?? null
 }
 
+/**
+ * Portais de governo costumam usar `&nbsp;` (e outras entidades) entre o
+ * rótulo e o valor — ex.: "Descontos R$:&nbsp;6,39". Sem decodificar, o
+ * texto vira "Descontos R$:&nbsp;6,39" literal, e nenhuma regex de valor
+ * bate (o `\s*` não casa com a entidade não decodificada). Cobre só as
+ * entidades relevantes para texto de nota fiscal — não é um parser de
+ * HTML genérico.
+ */
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(
+      /&([a-z]+);/gi,
+      (match, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? match,
+    )
+}
+
 /** Marca o início do bloco de totais da nota (fim da lista de itens). */
 const TOTALS_SECTION_MARKER =
   /Valor\s+total\s+R\$|Valor\s+a\s+pagar|Qtde?\.?\s+total\s+de\s+itens/i
@@ -131,7 +160,7 @@ export function parseNfceHtml(html: string): NfceParseResult {
   let aggregateDiscountCents: number | null = null
 
   for (const row of rows) {
-    const text = row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    const text = decodeHtmlEntities(row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
 
     if (TOTALS_SECTION_MARKER.test(text)) {
       reachedTotals = true
@@ -207,6 +236,20 @@ export function parseNfceHtml(html: string): NfceParseResult {
 
   if (items.length === 0) {
     return { ok: false, reason: 'SEM_ITENS' }
+  }
+
+  // Alguns portais não colocam o bloco de totais dentro de `<tr>` (ex.:
+  // `<div>`/`<span>` fora de tabela) — nesse caso o laço acima nunca vê
+  // essa linha. Última tentativa: procura "Descontos R$" no documento
+  // inteiro, fora da estrutura de linhas.
+  if (aggregateDiscountCents === null) {
+    const wholeText = decodeHtmlEntities(
+      html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '),
+    )
+    const wholeMatch = AGGREGATE_DISCOUNT_LINE.exec(wholeText)
+    if (wholeMatch) {
+      aggregateDiscountCents = moneyToCents(wholeMatch[1] ?? '')
+    }
   }
 
   // Sem desconto atribuído a item nenhum (caso comum — ver comentário no

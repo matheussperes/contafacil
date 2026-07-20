@@ -15,6 +15,9 @@ import { tableKey } from '@/ui/hooks/useTableSnapshot'
 import type { ParsedNfceItem, NfceFailureReason } from '@/application/nfce/nfce-types'
 import { effectiveUnitPriceCents } from '@/infrastructure/nfce/nfce-parser'
 import { errorMessage } from '@/ui/errors/error-messages'
+import { parseMoneyToCents, parseQuantity } from '@/application/validators/inputs'
+import { allocate } from '@/domain/calculator/allocate'
+import { cents } from '@/domain/money/cents'
 
 type Step = 'scan' | 'loading' | 'review'
 
@@ -76,6 +79,7 @@ export function ScannerSheet({
   const [items, setItems] = useState<DraftItem[]>([])
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [noteDiscount, setNoteDiscount] = useState('')
 
   async function handleDetected(text: string) {
     setStep('loading')
@@ -98,6 +102,50 @@ export function ScannerSheet({
 
   function removeItem(index: number) {
     setItems((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  /**
+   * Rede de segurança quando o parser não identifica o desconto sozinho
+   * (a nota do usuário não bate no formato que o parser reconhece): quem
+   * revisa digita o valor total do desconto impresso na nota, e ele é
+   * rateado entre os itens listados pelo mesmo método (`allocate`) usado
+   * automaticamente — trata os preços atuais como o bruto a ratear.
+   */
+  function applyNoteDiscount(discountCents: number) {
+    setItems((prev) => {
+      const grossTotals = prev.map((it) => {
+        try {
+          const qty = parseQuantity(it.quantity)
+          const price = parseMoneyToCents(it.unitPrice)
+          return Math.round((qty * price) / 1000)
+        } catch {
+          return 0
+        }
+      })
+      const grossSum = grossTotals.reduce((a, b) => a + b, 0)
+      if (discountCents <= 0 || grossSum <= 0 || discountCents >= grossSum) {
+        toast.show('Desconto inválido para os itens atuais', 'danger')
+        return prev
+      }
+      const shares = allocate(cents(discountCents), grossTotals)
+      return prev.map((it, i) => {
+        const gross = grossTotals[i] ?? 0
+        const share = shares[i] ?? 0
+        const net = gross - share
+        if (net < 1) return it
+        let qtyMilli: number
+        try {
+          qtyMilli = parseQuantity(it.quantity)
+        } catch {
+          return it
+        }
+        return {
+          ...it,
+          unitPrice: centsToInputValue(Math.max(1, Math.round((net * 1000) / qtyMilli))),
+          discounted: true,
+        }
+      })
+    })
   }
 
   async function confirm() {
@@ -132,6 +180,7 @@ export function ScannerSheet({
     setStep('scan')
     setItems([])
     setFailure(null)
+    setNoteDiscount('')
   }
 
   return (
@@ -227,6 +276,43 @@ export function ScannerSheet({
             <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
               Nenhum item — nada será adicionado.
             </p>
+          )}
+          {items.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-dashed p-2">
+              <p className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+                A nota teve desconto e não apareceu nos preços acima? Digite o
+                valor total do desconto — ele é rateado entre os itens
+                listados.
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-label="Desconto total da nota"
+                  prefix="R$"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={noteDiscount}
+                  onChange={(e) => setNoteDiscount(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    let discountCents: number
+                    try {
+                      discountCents = parseMoneyToCents(noteDiscount)
+                    } catch {
+                      toast.show('Desconto inválido', 'danger')
+                      return
+                    }
+                    applyNoteDiscount(discountCents)
+                    setNoteDiscount('')
+                  }}
+                >
+                  Ratear desconto
+                </Button>
+              </div>
+            </div>
           )}
           <div className="flex gap-2">
             <Button variant="ghost" onClick={reset}>

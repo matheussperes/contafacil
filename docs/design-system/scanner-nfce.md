@@ -184,6 +184,41 @@ líquida = R$ 74,81 exata, preços de tabela preservados, e o preço efetivo
 da batata cai de R$ 6,39 para R$ 5,89/unidade após o rateio. Total do
 projeto: 133 testes verdes.
 
+## Correção pós-deploy 4: desconto ainda não aplicava (mesmo após a correção 3)
+
+O usuário testou de novo e o valor final continuou vindo cheio, sem
+desconto. A correção 3 estava certa em matemática (comprovada nos
+testes), mas dependia de dois pressupostos sobre o HTML real que não dá
+para confirmar sem acesso à página ao vivo:
+
+1. **Entidades HTML não decodificadas.** Portais de governo costumam
+   separar rótulo e valor com `&nbsp;` (ex.: `Descontos R$:&nbsp;6,39`).
+   O parser só tirava as tags e colapsava espaços — a entidade ficava
+   como texto literal `&nbsp;`, e a regex do valor (que espera espaço em
+   branco de verdade) nunca casava. Corrigido com `decodeHtmlEntities`
+   (nbsp/amp/lt/gt/quot/apos + entidades numéricas), aplicado antes de
+   qualquer regex de valor.
+2. **Bloco de totais pode não estar dentro de `<tr>`.** O parser só varria
+   linhas de tabela (`<tr>...</tr>`); se o portal renderiza o resumo em
+   `<div>`/`<span>` fora de tabela (comum em templates mais novos), essa
+   seção nunca era vista. Adicionado um fallback: se nenhum `Descontos R$`
+   foi achado varrendo linhas, tenta de novo no **documento inteiro**
+   (tags removidas, entidades decodificadas), antes de desistir.
+
+**Rede de segurança nova, sugerida pelo usuário**: mesmo com as correções
+acima, não há como garantir cobertura de toda variação de todo estado
+(são 27 SEFAZ diferentes). A tela de revisão ganhou um campo **"Desconto
+total da nota"** — quem revisa digita o valor impresso na nota e clica em
+"Ratear desconto"; o app distribui esse valor entre os itens listados
+pelo mesmo `allocate()` usado automaticamente, tratando os preços atuais
+como o bruto a ratear. Não depende do parser identificar nada sozinho —
+funciona mesmo se a SEFAZ mudar o layout de novo.
+
+2 novos testes de parser (entidade + totais fora de `<tr>`) confirmam a
+robustez, com os números conferidos à mão: soma líquida bate exata com o
+"Valor a pagar" também nesse layout alternativo. Total do projeto: 134
+testes verdes.
+
 ## Pendência de ambiente
 
 Ler o QR de uma NFC-e real com a câmera e bater numa SEFAZ ao vivo exige
