@@ -17,9 +17,13 @@ fallback manual garantido em qualquer falha (RN-060/061).
   HTML cru nem loga a URL.
 - `infrastructure/nfce/http-nfce-gateway.ts` — cliente do port; toda falha
   de rede vira `SEFAZ_INDISPONIVEL`.
-- `ui/features/scanner/QrScanner.tsx` — leitura por `BarcodeDetector`
-  nativo; sem câmera/suporte/permissão → colar a URL (nenhuma via sem
-  saída).
+- `ui/features/scanner/QrScanner.tsx` — sempre tenta abrir a câmera
+  primeiro. Decodifica via `BarcodeDetector` nativo quando o navegador
+  suporta (Chrome/Edge); nos demais (Safari/iOS, Firefox — sem suporte a
+  essa API), decodifica os frames via `<canvas>` + `jsqr`, que funciona em
+  qualquer navegador. Só cai no modo manual (colar URL) se a câmera
+  falhar de verdade (permissão negada, sem câmera, `getUserMedia`
+  ausente) — nunca por falta de suporte a uma API específica.
 - `ui/features/scanner/ScannerSheet.tsx` — orquestra scan → revisão →
   inserção pelo **mesmo CRUD** (`item.addMany`, origem NFCE); qualquer
   falha volta ao passo com a opção "adicionar manualmente".
@@ -35,7 +39,16 @@ resto do sistema (RN-021), verificado no motor e nos testes de item.
 
 `nfce-parser.test.ts` (7): conversões BR/US sem float, `isNfceUrl`, dois
 layouts de UF (SP com total, MG com quantidade fracionária sem total) e as
-falhas SEM_ITENS/FORMATO_DESCONHECIDO. Total do projeto: 117 testes verdes.
+falhas SEM_ITENS/FORMATO_DESCONHECIDO. Total do projeto: 119 testes verdes.
+
+## Correção pós-deploy: câmera não abria em alguns navegadores
+
+A primeira versão usava só `BarcodeDetector` e, quando a API não existia
+no navegador, pulava direto para o modo manual **sem sequer pedir a
+câmera** — o que acontecia em praticamente todo iPhone (Safari não
+implementa essa API) e no Firefox. Corrigido adicionando `jsqr` como
+decodificador via canvas para esses casos; a câmera agora abre sempre que
+existir e há permissão, em qualquer navegador.
 
 ## Pendência de ambiente
 
