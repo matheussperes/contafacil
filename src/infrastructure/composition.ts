@@ -61,7 +61,7 @@ export function buildServices(deps?: {
     item: new ItemService(items),
     assignment: new AssignmentService(assignments),
     payment: new PaymentService(payments, logger),
-    closing: new ClosingService(gateway, logger),
+    closing: new ClosingService(gateway, logger, assignments),
     gateway,
     realtime,
     ensureSession: () => ensureAnonymousSession(client),

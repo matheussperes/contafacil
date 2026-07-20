@@ -20,9 +20,12 @@ import type { Item } from '@/domain/entities/types'
 import { useServices } from '@/ui/providers/ServicesProvider'
 import { useTableSnapshot } from '@/ui/hooks/useTableSnapshot'
 import { useTableView } from '@/ui/hooks/useTableView'
+import { canStartClosing } from '@/domain/entities/table-state'
 import { AddItemSheet } from '@/ui/features/table/AddItemSheet'
 import { DistributionSheet } from '@/ui/features/distribution/DistributionSheet'
 import { ParticipantSummary } from '@/ui/features/distribution/ParticipantSummary'
+import { ClosingDialog } from '@/ui/features/closing/ClosingDialog'
+import { PaymentsPanel } from '@/ui/features/payment/PaymentsPanel'
 import { errorMessage } from '@/ui/errors/error-messages'
 
 // Mesa (F3): tela viva — participantes, itens e resumo em tempo real.
@@ -36,6 +39,7 @@ export function TableScreen({ tableId }: { tableId: string }) {
   const view = useTableView(query.data, session?.participantId ?? null)
   const [addOpen, setAddOpen] = useState(false)
   const [distItem, setDistItem] = useState<Item | null>(null)
+  const [closingOpen, setClosingOpen] = useState(false)
 
   if (query.isLoading) {
     return (
@@ -154,8 +158,10 @@ export function TableScreen({ tableId }: { tableId: string }) {
         )}
       </section>
 
-      {items.length > 0 && (
-        <ParticipantSummary view={view} />
+      {items.length > 0 && <ParticipantSummary view={view} />}
+
+      {(view.isClosed || table.status === 'FECHANDO') && (
+        <PaymentsPanel tableId={tableId} view={view} />
       )}
 
       {totals.unassignedValueCents > 0 && (
@@ -187,9 +193,15 @@ export function TableScreen({ tableId }: { tableId: string }) {
           <Button fullWidth onClick={() => setAddOpen(true)}>
             Adicionar item
           </Button>
-          <Button variant="secondary" onClick={leave}>
-            Sair
-          </Button>
+          {canStartClosing(table, me, items.length, participants.length) ? (
+            <Button variant="secondary" onClick={() => setClosingOpen(true)}>
+              Fechar conta
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={leave}>
+              Sair
+            </Button>
+          )}
         </div>
       )}
 
@@ -212,6 +224,13 @@ export function TableScreen({ tableId }: { tableId: string }) {
           existing={itemCoverage(distItem, view.assignments).assignment}
         />
       )}
+
+      <ClosingDialog
+        open={closingOpen}
+        onClose={() => setClosingOpen(false)}
+        tableId={tableId}
+        view={view}
+      />
     </main>
   )
 }

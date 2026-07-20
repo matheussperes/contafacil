@@ -4,11 +4,15 @@
  * acrescenta a resolução de itens sem dono (RN-032) e a UI da máquina
  * de estados. O cálculo é do domínio; o banco re-verifica (ADR-007).
  */
-import type { TableGateway } from '@/application/ports/table-gateway'
+import type {
+  AssignmentRepository,
+  TableGateway,
+} from '@/application/ports/table-gateway'
 import type { Logger } from '@/application/ports/logger'
 import {
   buildPayments,
   computeClosingShares,
+  computeTableTotals,
 } from '@/domain/calculator/table-calculator'
 import type { TableSnapshot } from '@/domain/entities/types'
 import { DomainError } from '@/domain/errors/domain-error'
@@ -18,11 +22,65 @@ export interface ClosePayee {
   pixKey: string
 }
 
+export interface ClosingValidation {
+  hasUnassigned: boolean
+  unassignedValueCents: number
+  needsPayeeChoice: boolean
+}
+
 export class ClosingService {
   constructor(
     private readonly gateway: TableGateway,
     private readonly logger: Logger,
+    private readonly assignments?: AssignmentRepository,
   ) {}
+
+  /** Pré-checagem antes de iniciar o fechamento (RN-030/032). */
+  validate(snapshot: TableSnapshot): ClosingValidation {
+    const totals = computeTableTotals({
+      table: snapshot.table,
+      participants: snapshot.participants,
+      items: snapshot.items,
+      assignments: snapshot.assignments,
+    })
+    return {
+      hasUnassigned: totals.unassignedValueCents > 0,
+      unassignedValueCents: totals.unassignedValueCents,
+      needsPayeeChoice:
+        snapshot.table.settlementMode === 'RECEBEDOR_NO_FECHAMENTO',
+    }
+  }
+
+  /**
+   * RN-032: divide os itens sem dono igualmente entre TODOS os
+   * participantes com consumo (ou ativos, se ninguém consumiu ainda),
+   * criando uma atribuição "Todos" por item não coberto. Exige o
+   * AssignmentRepository injetado.
+   */
+  async divideUnassignedAmongAll(snapshot: TableSnapshot): Promise<void> {
+    if (this.assignments === undefined) {
+      throw new DomainError('OPERACAO_INVALIDA', 'sem repositório de distribuição')
+    }
+    const active = snapshot.participants.filter((p) => p.status === 'ATIVO')
+    if (active.length === 0) throw new DomainError('MESA_SEM_PARTICIPANTES')
+
+    for (const item of snapshot.items) {
+      const covered = snapshot.assignments
+        .filter((a) => a.itemId === item.id)
+        .reduce((acc, a) => acc + a.quantityMilli, 0)
+      const uncovered = item.quantityMilli - covered
+      if (uncovered <= 0) continue
+      await this.assignments.upsert({
+        itemId: item.id,
+        mode: 'TODOS',
+        quantityMilli: uncovered as typeof item.quantityMilli,
+        members: active.map((p) => ({ participantId: p.id, weight: 1 })),
+      })
+    }
+    this.logger.info('itens sem dono divididos entre todos', {
+      tableId: snapshot.table.id,
+    })
+  }
 
   async start(tableId: string): Promise<void> {
     await this.gateway.startClosing(tableId)

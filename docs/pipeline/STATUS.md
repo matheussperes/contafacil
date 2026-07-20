@@ -13,8 +13,8 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | 06 | Design System | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 07 | Fluxo da Mesa | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 08 | Distribuição | ✅ Aprovada (em bloco) | 15/07/2026 |
-| 09 | Fechamento | 🔄 Em andamento | — |
-| 10 | PIX | ⬜ Não iniciada | — |
+| 09 | Fechamento | ✅ Aprovada (em bloco) | 15/07/2026 |
+| 10 | PIX | 🔄 Em andamento | — |
 | 11 | Scanner NFC-e | ⬜ Não iniciada | — |
 | 12 | Polimento | ⬜ Não iniciada | — |
 | 13 | Deploy | ⬜ Não iniciada | — |
