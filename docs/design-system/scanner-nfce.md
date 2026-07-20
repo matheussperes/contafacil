@@ -112,6 +112,40 @@ ele reconhece os rótulos mais comuns ("Desconto", "Vl. Desconto") mas não
 cobre necessariamente toda variação de todo estado. A tela de revisão
 editável é a rede de segurança para os casos que escaparem.
 
+## Correção pós-deploy 2: desconto em `<tr>` própria (Carrefour/SP)
+
+Um usuário mandou o **papel impresso** de uma nota com item promocional
+que ainda não estava sendo descontado. Importante: o papel impresso e a
+página web que o QR abre (o que o parser lê) são duas representações
+diferentes da mesma compra — o papel não prova o HTML real. Ainda assim,
+ele confirma o padrão mais comum na prática: a linha "Desconto sobre
+item" aparece **numa `<tr>` separada, logo depois da `<tr>` do item** —
+não dentro da mesma linha, como a correção anterior assumia.
+
+- `PER_ITEM_DISCOUNT_LINE`: reconhece uma linha própria contendo "Desconto
+  (sobre) (o) item" e aplica ao **último item lido** antes dela.
+- Exige a palavra "item" especificamente para nunca se confundir com a
+  linha de total agregado da nota ("Descontos R$ ..."), que aparece no
+  bloco de totais — evitando contar o desconto duas vezes.
+- `TOTALS_SECTION_MARKER` marca o início do bloco de totais ("Valor total
+  R$", "Valor a pagar", "Qtde total de itens"); a partir dali, nenhuma
+  linha de desconto é mais atribuída a item algum — mesmo que alguma
+  variação de rótulo inclua a palavra "item" por acaso.
+
+Novo teste replica exatamente essa estrutura (3 itens + linha de desconto
+própria entre o 2º e o 3º + bloco de totais no fim) e confirma: o item
+antes do desconto não é tocado, o item com a linha logo depois recebe o
+líquido certo, e o item seguinte **não** herda nem o desconto do anterior
+nem o total agregado do bloco de totais. Total do projeto: 131 testes.
+
+**Ainda não verificado contra o HTML real.** Sem acesso a uma nota ao
+vivo, não há como confirmar que a página da SEFAZ usa exatamente essa
+redação. Se o próximo teste do usuário ainda não pegar o desconto
+automaticamente, o próximo passo é pedir um print da **página que abre no
+navegador** (não o papel) para ver o texto exato — a tela de revisão
+editável do scanner continua sendo a rede de segurança garantida
+enquanto isso.
+
 ## Pendência de ambiente
 
 Ler o QR de uma NFC-e real com a câmera e bater numa SEFAZ ao vivo exige

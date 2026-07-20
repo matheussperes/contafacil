@@ -41,6 +41,23 @@ const fixtureTotalLiquido = `
 </table>
 </body></html>`
 
+// Layout observado na prática (rede Carrefour/SP): o desconto vem numa
+// <tr> própria, LOGO APÓS a <tr> do item — não na mesma linha — e a nota
+// ainda tem um bloco de totais no fim repetindo "Descontos R$" agregado.
+const fixtureDescontoEmLinhaPropria = `
+<html><body>
+<span>Estado: SP</span>
+<table>
+  <tr><td>BALA GELAT FINI TUBE</td><td>Qtde.: 1</td><td>Vl. Unit.: 2,78</td></tr>
+  <tr><td>BATATA OND CEB SALS</td><td>Qtde.: 3</td><td>Vl. Unit.: 6,39</td></tr>
+  <tr><td>Desconto sobre item R$ 6,39</td></tr>
+  <tr><td>BALA FINI HI CIT 800</td><td>Qtde.: 1</td><td>Vl. Unit.: 9,29</td></tr>
+  <tr><td>Valor total R$: 81,20</td></tr>
+  <tr><td>Descontos R$: 6,39</td></tr>
+  <tr><td>Valor a Pagar R$: 74,81</td></tr>
+</table>
+</body></html>`
+
 describe('conversões (sem float)', () => {
   it('moneyToCents entende padrão BR e US', () => {
     expect(moneyToCents('15,90')).toBe(1590)
@@ -165,5 +182,35 @@ describe('desconto por item (RN-060) — item promocional', () => {
         totalCents: 0,
       }),
     ).toBe(500)
+  })
+
+  it('desconto em <tr> própria (Carrefour/SP): aplica só ao item anterior', () => {
+    const r = parseNfceHtml(fixtureDescontoEmLinhaPropria)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.data.items).toHaveLength(3)
+
+    // item antes do desconto: sem Vl.Total informado, não é tocado
+    expect(r.data.items[0]).toMatchObject({
+      quantityMilli: 1000,
+      unitPriceCents: 278,
+      totalCents: null,
+    })
+
+    // item com a linha "Desconto sobre item" logo depois: líquido
+    // 3×6,39 = 19,17 − 6,39 = 12,78
+    expect(r.data.items[1]).toMatchObject({
+      quantityMilli: 3000,
+      unitPriceCents: 639,
+      totalCents: 1278,
+    })
+
+    // item seguinte: não recebe o desconto do item anterior nem o
+    // "Descontos R$" agregado do bloco de totais (evita contar 2x)
+    expect(r.data.items[2]).toMatchObject({
+      quantityMilli: 1000,
+      unitPriceCents: 929,
+      totalCents: null,
+    })
   })
 })

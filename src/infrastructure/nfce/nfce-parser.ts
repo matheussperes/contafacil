@@ -50,6 +50,26 @@ function extractUf(html: string): string | null {
   return m?.[1]?.toUpperCase() ?? null
 }
 
+/** Marca o início do bloco de totais da nota (fim da lista de itens). */
+const TOTALS_SECTION_MARKER =
+  /Valor\s+total\s+R\$|Valor\s+a\s+pagar|Qtde\.?\s+total\s+de\s+itens/i
+
+/**
+ * Linha de desconto de UM item, em separado da linha do item (ex.:
+ * "Desconto sobre item R$ 6,39" numa `<tr>` própria, logo após o item —
+ * layout observado em notas da rede Carrefour/SP). Exige a palavra
+ * "item" para não se confundir com o total agregado de descontos da
+ * nota ("Descontos R$ ..."), que aparece no bloco de totais.
+ */
+const PER_ITEM_DISCOUNT_LINE = /Desconto\s+(?:sobre\s+)?(?:o\s+)?item/i
+
+function applyPerItemDiscount(item: ParsedNfceItem, discountCents: number): ParsedNfceItem {
+  const gross =
+    item.totalCents ?? Math.round((item.quantityMilli * item.unitPriceCents) / 1000)
+  const net = gross - discountCents
+  return net >= 1 ? { ...item, totalCents: net } : item
+}
+
 /**
  * Parser principal. Reconhece dois formatos comuns:
  * 1) linhas de tabela `<tr>` com células de descrição/qtde/unitário;
@@ -68,8 +88,17 @@ export function parseNfceHtml(html: string): NfceParseResult {
   const rowRegex =
     /<tr[^>]*>[\s\S]*?<\/tr>/gi
   const rows = html.match(rowRegex) ?? []
+  let reachedTotals = false
+
   for (const row of rows) {
     const text = row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+
+    if (TOTALS_SECTION_MARKER.test(text)) {
+      reachedTotals = true
+      // segue processando (a própria linha de totais não vira item nem
+      // desconto — só marca o fim da lista para as linhas seguintes)
+    }
+
     const qty = /Qtde\.?\s*:?\s*([\d.,]+)/i.exec(text)
     const unit = /Vl\.?\s*Unit\.?\s*:?\s*([\d.,]+)/i.exec(text)
     const nameMatch = /^([A-Za-zÀ-ÿ0-9][^0-9]*?)\s+(?:\(|Qtde|Código)/i.exec(text)
@@ -85,13 +114,14 @@ export function parseNfceHtml(html: string): NfceParseResult {
         description.length > 0
       ) {
         const totalRaw = /Vl\.?\s*Total\.?\s*:?\s*([\d.,]+)/i.exec(text)
+        // Desconto na MESMA linha do item (layout com tudo num só <tr>).
         const discountRaw =
           /(?:Vl\.?\s*)?Desconto[s]?\.?\s*(?:R\$)?\s*:?\s*([\d.,]+)/i.exec(text)
         const discountCents = discountRaw ? moneyToCents(discountRaw[1] ?? '') : null
 
         // Vl. Total, quando a nota o informa, já costuma vir líquido de
         // desconto — é a fonte preferida. Sem ele, mas com "Desconto"
-        // detectado, deriva o líquido: qtde×unitário − desconto.
+        // detectado na mesma linha, deriva o líquido: qtde×unitário − desconto.
         let totalCents = totalRaw ? moneyToCents(totalRaw[1] ?? '') : null
         if (totalCents === null && discountCents !== null && discountCents > 0) {
           const gross = Math.round((quantityMilli * unitPriceCents) / 1000)
@@ -105,6 +135,22 @@ export function parseNfceHtml(html: string): NfceParseResult {
           unitPriceCents,
           totalCents,
         })
+      }
+      continue
+    }
+
+    // Desconto em linha PRÓPRIA, separada da linha do item (layout
+    // observado na prática — ver PER_ITEM_DISCOUNT_LINE). Só antes do
+    // bloco de totais, e só se o valor estiver na própria linha: aplica
+    // ao último item lido, sem contar de novo o desconto agregado da
+    // nota (que aparece depois, no bloco de totais).
+    if (!reachedTotals && items.length > 0 && PER_ITEM_DISCOUNT_LINE.test(text)) {
+      const valueMatch = /([\d.,]+)/.exec(text.replace(PER_ITEM_DISCOUNT_LINE, ''))
+      const discountCents = valueMatch ? moneyToCents(valueMatch[1] ?? '') : null
+      const lastIndex = items.length - 1
+      const last = items[lastIndex]
+      if (discountCents !== null && discountCents > 0 && last !== undefined) {
+        items[lastIndex] = applyPerItemDiscount(last, discountCents)
       }
     }
   }
