@@ -6,7 +6,6 @@ import {
   BottomSheet,
   Button,
   Input,
-  formatCents,
   formatQuantityMilli,
   useToast,
 } from '@/ui/design-system'
@@ -14,6 +13,7 @@ import { QrScanner } from '@/ui/features/scanner/QrScanner'
 import { useServices } from '@/ui/providers/ServicesProvider'
 import { tableKey } from '@/ui/hooks/useTableSnapshot'
 import type { ParsedNfceItem, NfceFailureReason } from '@/application/nfce/nfce-types'
+import { effectiveUnitPriceCents } from '@/infrastructure/nfce/nfce-parser'
 import { errorMessage } from '@/ui/errors/error-messages'
 
 type Step = 'scan' | 'loading' | 'review'
@@ -25,8 +25,39 @@ const FAIL_MSG: Record<NfceFailureReason, string> = {
   SEM_ITENS: 'Não encontramos itens nessa nota.',
 }
 
+/**
+ * Item em edição na revisão (F3/RN-060). Quantidade e preço ficam como
+ * texto — os mesmos formatos aceitos no formulário manual (AddItemSheet)
+ * — e são validados/convertidos pelo ItemService no confirm(), único
+ * lugar que faz esse parsing (sem duplicar regra aqui).
+ */
+interface DraftItem {
+  description: string
+  quantity: string
+  unitPrice: string
+  /** true quando o preço já veio ajustado por desconto da nota */
+  discounted: boolean
+}
+
+/** 1590 → "15,90" — formato aceito por parseMoneyToCents (decimal com vírgula). */
+function centsToInputValue(cents: number): string {
+  return (cents / 100).toFixed(2).replace('.', ',')
+}
+
+function toDraft(item: ParsedNfceItem): DraftItem {
+  const effective = effectiveUnitPriceCents(item)
+  return {
+    description: item.description,
+    quantity: formatQuantityMilli(item.quantityMilli),
+    unitPrice: centsToInputValue(effective),
+    discounted: effective !== item.unitPriceCents,
+  }
+}
+
 // Scanner NFC-e (F11): scan → parser → revisão → mesa. Qualquer falha cai
-// na entrada manual (RN-061) — nunca há beco sem saída.
+// na entrada manual (RN-061) — nunca há beco sem saída. A revisão permite
+// editar descrição, quantidade e preço (RN-060: "revê e edita"), inclusive
+// para corrigir descontos que o parser não tenha identificado sozinho.
 export function ScannerSheet({
   open,
   onClose,
@@ -42,7 +73,7 @@ export function ScannerSheet({
   const toast = useToast()
   const queryClient = useQueryClient()
   const [step, setStep] = useState<Step>('scan')
-  const [items, setItems] = useState<ParsedNfceItem[]>([])
+  const [items, setItems] = useState<DraftItem[]>([])
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -55,11 +86,11 @@ export function ScannerSheet({
       setStep('scan')
       return
     }
-    setItems(result.data.items)
+    setItems(result.data.items.map(toDraft))
     setStep('review')
   }
 
-  function updateItem(index: number, patch: Partial<ParsedNfceItem>) {
+  function updateItem(index: number, patch: Partial<DraftItem>) {
     setItems((prev) =>
       prev.map((it, i) => (i === index ? { ...it, ...patch } : it)),
     )
@@ -80,8 +111,8 @@ export function ScannerSheet({
         items.map((it) => ({
           tableId,
           description: it.description,
-          quantity: it.quantityMilli / 1000,
-          unitPrice: it.unitPriceCents / 100,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
           source: 'NFCE' as const,
           createdBy,
         })),
@@ -140,31 +171,55 @@ export function ScannerSheet({
       {step === 'review' && (
         <div className="flex flex-col gap-3">
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Confira os itens antes de adicionar à mesa.
+            Confira e ajuste os itens antes de adicionar à mesa. Preços com
+            desconto na nota já vêm ajustados — mas você pode corrigir
+            qualquer valor à mão.
           </p>
           <ul className="flex flex-col gap-2">
             {items.map((it, i) => (
               <li
                 key={i}
-                className="flex items-center gap-2 rounded-[var(--radius-md)] border p-2"
+                className="flex flex-col gap-2 rounded-[var(--radius-md)] border p-2"
               >
-                <Input
-                  aria-label="Descrição"
-                  value={it.description}
-                  onChange={(e) => updateItem(i, { description: e.target.value })}
-                  className="flex-1"
-                />
-                <span className="whitespace-nowrap text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  {formatQuantityMilli(it.quantityMilli)} ×{' '}
-                  {formatCents(it.unitPriceCents as never)}
-                </span>
-                <button
-                  aria-label={`Remover ${it.description}`}
-                  onClick={() => removeItem(i)}
-                  className="px-2 text-[var(--color-danger)]"
-                >
-                  ×
-                </button>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="Descrição"
+                    value={it.description}
+                    onChange={(e) =>
+                      updateItem(i, { description: e.target.value })
+                    }
+                    className="flex-1"
+                  />
+                  <button
+                    aria-label={`Remover ${it.description}`}
+                    onClick={() => removeItem(i)}
+                    className="px-2 text-[var(--color-danger)]"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="Quantidade"
+                    inputMode="decimal"
+                    value={it.quantity}
+                    onChange={(e) => updateItem(i, { quantity: e.target.value })}
+                    className="w-20"
+                  />
+                  <Input
+                    aria-label="Preço unitário"
+                    prefix="R$"
+                    inputMode="decimal"
+                    value={it.unitPrice}
+                    onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
+                    className="flex-1"
+                  />
+                </div>
+                {it.discounted && (
+                  <p className="text-[length:var(--text-xs)] text-[var(--color-positive)]">
+                    Preço ajustado pelo desconto da nota
+                  </p>
+                )}
               </li>
             ))}
           </ul>

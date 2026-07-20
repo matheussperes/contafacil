@@ -7,6 +7,12 @@
  * Estratégia: em vez de depender do layout exato de cada UF, varre a
  * tabela de produtos por padrões comuns (qtde/unitário/descrição) e
  * converte tudo para inteiros (centavos / mili-unidades).
+ *
+ * Desconto por item: a nota às vezes já mostra "Vl. Total" líquido
+ * (após desconto promocional) e/ou uma linha "Desconto R$ X". Quando
+ * algum dos dois aparece, `totalCents` reflete o valor líquido da linha
+ * — é ele, e não `unitPriceCents` (o preço de tabela impresso), que deve
+ * virar o preço a cobrar (ver `effectiveUnitPriceCents`).
  */
 import type {
   NfceParseResult,
@@ -79,11 +85,25 @@ export function parseNfceHtml(html: string): NfceParseResult {
         description.length > 0
       ) {
         const totalRaw = /Vl\.?\s*Total\.?\s*:?\s*([\d.,]+)/i.exec(text)
+        const discountRaw =
+          /(?:Vl\.?\s*)?Desconto[s]?\.?\s*(?:R\$)?\s*:?\s*([\d.,]+)/i.exec(text)
+        const discountCents = discountRaw ? moneyToCents(discountRaw[1] ?? '') : null
+
+        // Vl. Total, quando a nota o informa, já costuma vir líquido de
+        // desconto — é a fonte preferida. Sem ele, mas com "Desconto"
+        // detectado, deriva o líquido: qtde×unitário − desconto.
+        let totalCents = totalRaw ? moneyToCents(totalRaw[1] ?? '') : null
+        if (totalCents === null && discountCents !== null && discountCents > 0) {
+          const gross = Math.round((quantityMilli * unitPriceCents) / 1000)
+          const net = gross - discountCents
+          totalCents = net >= 1 ? net : null
+        }
+
         items.push({
           description: description.slice(0, 100),
           quantityMilli,
           unitPriceCents,
-          totalCents: totalRaw ? moneyToCents(totalRaw[1] ?? '') : null,
+          totalCents,
         })
       }
     }
@@ -93,4 +113,22 @@ export function parseNfceHtml(html: string): NfceParseResult {
     return { ok: false, reason: 'SEM_ITENS' }
   }
   return { ok: true, data: { items, uf } }
+}
+
+/**
+ * Preço unitário a efetivamente cobrar (RN-060): quando a nota informa
+ * o total líquido da linha (`totalCents` — já com desconto aplicado,
+ * ver `parseNfceHtml`), deriva o preço por unidade a partir dele, em vez
+ * do preço de tabela impresso (`unitPriceCents`). Sem total informado,
+ * usa o preço de tabela como está. Sempre um inteiro em centavos ≥ 1
+ * (ADR-001) — nunca deriva um preço zerado ou negativo.
+ */
+export function effectiveUnitPriceCents(
+  item: Pick<ParsedNfceItem, 'quantityMilli' | 'unitPriceCents' | 'totalCents'>,
+): number {
+  if (item.totalCents === null || item.quantityMilli <= 0) {
+    return item.unitPriceCents
+  }
+  const derived = Math.round((item.totalCents * 1000) / item.quantityMilli)
+  return derived >= 1 ? derived : item.unitPriceCents
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  effectiveUnitPriceCents,
   isNfceUrl,
   moneyToCents,
   parseNfceHtml,
@@ -21,6 +22,22 @@ const fixtureMG = `
 <div>uf=MG</div>
 <table>
   <tr><td>AGUA MINERAL 500ML</td><td>Qtde: 2,000</td><td>Vl Unit: 5,00</td></tr>
+</table>
+</body></html>`
+
+// Item promocional: nota só informa "Desconto", sem Vl. Total explícito.
+const fixtureDescontoSemTotal = `
+<html><body>
+<table>
+  <tr><td>CERVEJA PROMO 350ML</td><td>Qtde.: 1</td><td>Vl. Unit.: 10,00</td><td>Desconto R$: 6,39</td></tr>
+</table>
+</body></html>`
+
+// Item promocional: nota já informa Vl. Total líquido (mais comum na prática).
+const fixtureTotalLiquido = `
+<html><body>
+<table>
+  <tr><td>REFRIGERANTE PROMO 2L</td><td>Qtde.: 2</td><td>Vl. Unit.: 5,00</td><td>Vl. Total: 8,61</td></tr>
 </table>
 </body></html>`
 
@@ -82,5 +99,71 @@ describe('parseNfceHtml (RN-060) — tolerante a UF', () => {
       ok: false,
       reason: 'FORMATO_DESCONHECIDO',
     })
+  })
+})
+
+describe('desconto por item (RN-060) — item promocional', () => {
+  it('sem Vl. Total: deriva o líquido de qtde×unitário − desconto', () => {
+    const r = parseNfceHtml(fixtureDescontoSemTotal)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    // Qtde 1 × Vl.Unit 10,00 − Desconto 6,39 = 3,61
+    expect(r.data.items[0]).toMatchObject({
+      quantityMilli: 1000,
+      unitPriceCents: 1000,
+      totalCents: 361,
+    })
+  })
+
+  it('com Vl. Total já líquido: usa o total informado (não recalcula)', () => {
+    const r = parseNfceHtml(fixtureTotalLiquido)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.data.items[0]).toMatchObject({
+      quantityMilli: 2000,
+      unitPriceCents: 500, // preço de tabela impresso, informativo
+      totalCents: 861, // já líquido do desconto (2×5,00 seria 10,00)
+    })
+  })
+
+  it('effectiveUnitPriceCents deriva o preço a cobrar do total líquido', () => {
+    // caso do usuário: item a R$10,00 com R$6,39 de desconto → R$3,61
+    expect(
+      effectiveUnitPriceCents({
+        quantityMilli: 1000,
+        unitPriceCents: 1000,
+        totalCents: 361,
+      }),
+    ).toBe(361)
+
+    // 2 unidades, total líquido 8,61 → 4,305/un, arredonda para 431
+    expect(
+      effectiveUnitPriceCents({
+        quantityMilli: 2000,
+        unitPriceCents: 500,
+        totalCents: 861,
+      }),
+    ).toBe(431)
+  })
+
+  it('effectiveUnitPriceCents sem total informado mantém o preço de tabela', () => {
+    expect(
+      effectiveUnitPriceCents({
+        quantityMilli: 4000,
+        unitPriceCents: 1590,
+        totalCents: null,
+      }),
+    ).toBe(1590)
+  })
+
+  it('effectiveUnitPriceCents nunca deriva preço menor que 1 centavo', () => {
+    // desconto absurdo/erro de parsing não pode zerar o preço
+    expect(
+      effectiveUnitPriceCents({
+        quantityMilli: 1000,
+        unitPriceCents: 500,
+        totalCents: 0,
+      }),
+    ).toBe(500)
   })
 })

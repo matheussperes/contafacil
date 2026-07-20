@@ -73,6 +73,45 @@ lenta). Resolver de vez exigiria rodar a busca a partir de uma região
 brasileira (plano Pro, ou um relay externo) — decisão de infraestrutura,
 não só de código.
 
+## Correção pós-deploy: desconto de item promocional não era aplicado
+
+Dois bugs juntos faziam o valor final ficar sempre com o preço de tabela,
+ignorando qualquer desconto por item da nota:
+
+1. O parser só lia `Vl. Unit.` (preço de tabela) e `Vl. Total`; nunca
+   procurava por uma linha `Desconto`, então quando a nota só informava o
+   desconto (sem repetir o total já líquido), ele passava batido.
+2. Mesmo quando `totalCents` era capturado corretamente, o `ScannerSheet`
+   **descartava esse valor** ao inserir o item na mesa — sempre recalculava
+   `quantidade × preço de tabela`, sem nunca usar o total líquido.
+
+Corrigido em duas frentes:
+
+- `parseNfceHtml` agora também procura `Desconto`/`Vl. Desconto` por item
+  e, quando não há `Vl. Total` explícito, deriva o líquido
+  (`qtde×unitário − desconto`); quando há `Vl. Total`, ele já costuma vir
+  líquido na maioria dos portais e é usado como está.
+- Nova função `effectiveUnitPriceCents`: deriva o preço por unidade a
+  partir do total líquido da linha (em vez do preço de tabela) — é esse
+  preço, e não o impresso, que o `ScannerSheet` agora usa ao adicionar o
+  item à mesa. Assim o total do item na mesa bate com o que foi
+  efetivamente pago.
+- A tela de revisão passou a permitir editar **quantidade e preço**, não
+  só a descrição (a FASE 00 já previa "revê e edita" — a edição de valores
+  não tinha sido implementada). Quando um desconto é detectado
+  automaticamente, aparece um aviso "Preço ajustado pelo desconto da
+  nota"; se o parser não pegar um caso, dá para corrigir o preço na mão
+  antes de confirmar — sempre há uma saída manual (RN-061).
+
+12 testes novos cobrindo os dois formatos (com/sem `Vl. Total` líquido) e
+os limites de `effectiveUnitPriceCents` (sem total informado; desconto
+zerando o preço). Total do projeto: 124 testes verdes.
+
+**Limite aceito**: como o parser é baseado em padrões de texto (regex),
+ele reconhece os rótulos mais comuns ("Desconto", "Vl. Desconto") mas não
+cobre necessariamente toda variação de todo estado. A tela de revisão
+editável é a rede de segurança para os casos que escaparem.
+
 ## Pendência de ambiente
 
 Ler o QR de uma NFC-e real com a câmera e bater numa SEFAZ ao vivo exige
