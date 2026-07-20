@@ -13,8 +13,11 @@ fallback manual garantido em qualquer falha (RN-060/061).
   de depender do layout exato de cada estado; converte tudo para inteiros
   sem float. Nunca lança — classifica a falha.
 - `app/api/nfce/route.ts` — proxy server-side (contorna CORS da SEFAZ):
-  busca a página e devolve JSON normalizado; timeout de 8s; não repassa
-  HTML cru nem loga a URL.
+  busca a página e devolve JSON normalizado; cabeçalhos de navegador real
+  (User-Agent Chrome, Accept, Accept-Language — WAFs de SEFAZ costumam
+  bloquear requisições que parecem robô); timeout de 12s (`maxDuration=15`
+  na função); não repassa HTML cru nem loga a URL (só host + status/erro,
+  via `console.warn`, para diagnóstico nos logs da Vercel).
 - `infrastructure/nfce/http-nfce-gateway.ts` — cliente do port; toda falha
   de rede vira `SEFAZ_INDISPONIVEL`.
 - `ui/features/scanner/QrScanner.tsx` — sempre tenta abrir a câmera
@@ -49,6 +52,26 @@ câmera** — o que acontecia em praticamente todo iPhone (Safari não
 implementa essa API) e no Firefox. Corrigido adicionando `jsqr` como
 decodificador via canvas para esses casos; a câmera agora abre sempre que
 existir e há permissão, em qualquer navegador.
+
+## Correção pós-deploy: "não conseguimos falar com a SEFAZ"
+
+O proxy usava `User-Agent: Mozilla/5.0 ContaFacil` — uma string que se
+autoidentifica como robô, e WAFs de portais de SEFAZ costumam bloquear
+requisições fora do padrão de navegador. Trocado por um User-Agent real de
+Chrome + `Accept`/`Accept-Language`, com timeout maior e log de
+diagnóstico (host + status/erro, sem a URL) para investigar via Vercel.
+
+**Limite conhecido, não totalmente resolvido por código**: a região de
+função (`gru1`, São Paulo) definida em `vercel.json` só é honrada nos
+planos Pro/Enterprise da Vercel — no plano **Hobby**, a função roda de um
+datacenter nos EUA independente da configuração. Sites de governo
+brasileiros costumam ter bloqueio/lentidão maior para tráfego de fora do
+país. Se o erro persistir após esta correção, é o indício mais provável;
+confirmar olhando os logs da função (`Vercel → Deployments → Functions →
+/api/nfce`) para ver se aparece status HTTP (bloqueio) ou timeout (rede
+lenta). Resolver de vez exigiria rodar a busca a partir de uma região
+brasileira (plano Pro, ou um relay externo) — decisão de infraestrutura,
+não só de código.
 
 ## Pendência de ambiente
 
