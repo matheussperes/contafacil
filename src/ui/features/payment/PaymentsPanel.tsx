@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { Badge, Card, formatCents } from '@/ui/design-system'
 import type { TableView } from '@/ui/hooks/useTableView'
-import type { PaymentStatus } from '@/domain/entities/types'
+import type { Payment, PaymentStatus } from '@/domain/entities/types'
 import { isSettled } from '@/domain/entities/payment-state'
+import { PaymentSheet } from '@/ui/features/payment/PaymentSheet'
 
 // Painel de pagamentos da mesa fechada (F6/F8). Nesta fase mostra valores
 // e status (somente leitura); a FASE 10 acrescenta PIX e a mudança de
@@ -20,6 +22,7 @@ const STATUS_LABEL: Record<PaymentStatus, string> = {
 }
 
 export function PaymentsPanel({ view }: { tableId: string; view: TableView }) {
+  const [selected, setSelected] = useState<Payment | null>(null)
   const nameOf = (id: string) =>
     view.participants.find((p) => p.id === id)?.name ?? '—'
   const settled = isSettled(view.payments)
@@ -39,7 +42,12 @@ export function PaymentsPanel({ view }: { tableId: string; view: TableView }) {
       ) : (
         <div className="flex flex-col gap-2">
           {view.payments.map((pay) => (
-            <Card key={pay.id} className="flex items-center justify-between">
+            <Card
+              key={pay.id}
+              interactive
+              onClick={() => setSelected(pay)}
+              className="flex items-center justify-between"
+            >
               <div>
                 <p className="font-medium">{nameOf(pay.participantId)}</p>
                 <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
@@ -52,6 +60,15 @@ export function PaymentsPanel({ view }: { tableId: string; view: TableView }) {
             </Card>
           ))}
         </div>
+      )}
+
+      {selected && (
+        <PaymentSheet
+          open={selected !== null}
+          onClose={() => setSelected(null)}
+          payment={selected}
+          view={view}
+        />
       )}
     </section>
   )

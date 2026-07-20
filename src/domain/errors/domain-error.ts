@@ -36,6 +36,8 @@ export const DOMAIN_ERROR_CODES = [
   'DISTRIBUICAO_INVALIDA',
   'REFINAMENTO_MISTO',
   'PESO_INVALIDO',
+  // PIX
+  'CHAVE_PIX_INVALIDA',
   // asserções: indicam bug, nunca fluxo (estrategia-erros.md)
   'CONSERVACAO_VIOLADA',
   'CAMPO_IMUTAVEL',

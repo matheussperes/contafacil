@@ -14,8 +14,8 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | 07 | Fluxo da Mesa | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 08 | Distribuição | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 09 | Fechamento | ✅ Aprovada (em bloco) | 15/07/2026 |
-| 10 | PIX | 🔄 Em andamento | — |
-| 11 | Scanner NFC-e | ⬜ Não iniciada | — |
+| 10 | PIX | ✅ Aprovada (em bloco) | 15/07/2026 |
+| 11 | Scanner NFC-e | 🔄 Em andamento | — |
 | 12 | Polimento | ⬜ Não iniciada | — |
 | 13 | Deploy | ⬜ Não iniciada | — |
 
