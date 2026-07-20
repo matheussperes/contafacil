@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ContaFácil">
+  <rect width="512" height="512" rx="112" fill="#1f6f4f"/>
+  <path d="M256 112c-79 0-143 64-143 143s64 143 143 143c40 0 76-16 102-42l-45-45c-14 15-34 24-57 24-44 0-80-36-80-80s36-80 80-80c23 0 43 9 57 24l45-45c-26-26-62-42-102-42z" fill="#fff"/>
+  <circle cx="352" cy="176" r="28" fill="#8fe3b8"/>
+</svg>

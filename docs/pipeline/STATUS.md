@@ -16,7 +16,7 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | 09 | Fechamento | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 10 | PIX | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 11 | Scanner NFC-e | ✅ Aprovada (em bloco) | 15/07/2026 |
-| 12 | Polimento | 🔄 Em andamento | — |
-| 13 | Deploy | ⬜ Não iniciada | — |
+| 12 | Polimento | ✅ Aprovada (em bloco) | 15/07/2026 |
+| 13 | Deploy | 🔄 Em andamento | — |
 
 > Regra: uma fase só muda para `✅ Aprovada` com aprovação explícita do responsável pelo projeto, após validação de build, testes e lint.

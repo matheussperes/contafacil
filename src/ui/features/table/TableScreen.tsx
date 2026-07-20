@@ -21,9 +21,15 @@ import { useServices } from '@/ui/providers/ServicesProvider'
 import { useTableSnapshot } from '@/ui/hooks/useTableSnapshot'
 import { useTableView } from '@/ui/hooks/useTableView'
 import { canStartClosing } from '@/domain/entities/table-state'
+import dynamic from 'next/dynamic'
 import { AddItemSheet } from '@/ui/features/table/AddItemSheet'
-import { ScannerSheet } from '@/ui/features/scanner/ScannerSheet'
 import { DistributionSheet } from '@/ui/features/distribution/DistributionSheet'
+
+// Scanner é pesado (câmera + lib de QR): carrega só quando aberto.
+const ScannerSheet = dynamic(
+  () => import('@/ui/features/scanner/ScannerSheet').then((m) => m.ScannerSheet),
+  { ssr: false },
+)
 import { ParticipantSummary } from '@/ui/features/distribution/ParticipantSummary'
 import { ClosingDialog } from '@/ui/features/closing/ClosingDialog'
 import { PaymentsPanel } from '@/ui/features/payment/PaymentsPanel'
