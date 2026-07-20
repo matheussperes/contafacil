@@ -10,8 +10,8 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | 03 | Motor Matemático | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 04 | Backend | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 05 | Realtime | ✅ Aprovada (em bloco) | 15/07/2026 |
-| 06 | Design System | 🔄 Em andamento | — |
-| 07 | Fluxo da Mesa | ⬜ Não iniciada | — |
+| 06 | Design System | ✅ Aprovada (em bloco) | 15/07/2026 |
+| 07 | Fluxo da Mesa | 🔄 Em andamento | — |
 | 08 | Distribuição | ⬜ Não iniciada | — |
 | 09 | Fechamento | ⬜ Não iniciada | — |
 | 10 | PIX | ⬜ Não iniciada | — |

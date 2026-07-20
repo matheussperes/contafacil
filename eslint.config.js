@@ -4,7 +4,16 @@ import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['node_modules', '.next', 'coverage', 'dist', 'public'] },
+  {
+    ignores: [
+      'node_modules',
+      '.next',
+      'coverage',
+      'dist',
+      'public',
+      'next-env.d.ts',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
