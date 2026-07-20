@@ -3,8 +3,17 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 
-// Renderiza um QR Code (data URL) a partir do payload PIX. Client-only.
-export function QrCode({ value, size = 200 }: { value: string; size?: number }) {
+export interface QrCodeProps {
+  value: string
+  size?: number
+  /** rótulo acessível da imagem gerada — descreva o que o QR representa */
+  alt?: string
+}
+
+// Renderiza qualquer texto/URL como QR Code (data URL). Client-only.
+// Componente genérico do design system: usado hoje pelo PIX (FASE 10) e
+// pelo convite de mesa (F2) — sem acoplamento a nenhum dos dois.
+export function QrCode({ value, size = 200, alt = 'QR Code' }: QrCodeProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -34,7 +43,7 @@ export function QrCode({ value, size = 200 }: { value: string; size?: number }) 
   return (
     <img
       src={dataUrl}
-      alt="QR Code PIX"
+      alt={alt}
       width={size}
       height={size}
       className="rounded-[var(--radius-md)]"

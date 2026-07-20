@@ -4,10 +4,10 @@ import { useMemo, useState } from 'react'
 import {
   BottomSheet,
   Button,
+  QrCode,
   formatCents,
   useToast,
 } from '@/ui/design-system'
-import { QrCode } from '@/ui/features/payment/QrCode'
 import { useServices } from '@/ui/providers/ServicesProvider'
 import { paymentBrCode } from '@/domain/pix/payment-brcode'
 import type { Payment } from '@/domain/entities/types'
@@ -81,7 +81,7 @@ export function PaymentSheet({
 
         {pix.brCode ? (
           <>
-            <QrCode value={pix.brCode} />
+            <QrCode value={pix.brCode} alt="QR Code PIX" />
             <div className="w-full">
               <p className="mb-1 text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
                 PIX copia e cola

@@ -23,6 +23,7 @@ import { useTableView } from '@/ui/hooks/useTableView'
 import { canStartClosing } from '@/domain/entities/table-state'
 import dynamic from 'next/dynamic'
 import { AddItemSheet } from '@/ui/features/table/AddItemSheet'
+import { InviteSheet } from '@/ui/features/table/InviteSheet'
 import { DistributionSheet } from '@/ui/features/distribution/DistributionSheet'
 
 // Scanner é pesado (câmera + lib de QR): carrega só quando aberto.
@@ -48,6 +49,7 @@ export function TableScreen({ tableId }: { tableId: string }) {
   const [distItem, setDistItem] = useState<Item | null>(null)
   const [scanOpen, setScanOpen] = useState(false)
   const [closingOpen, setClosingOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   if (query.isLoading) {
     return (
@@ -93,13 +95,20 @@ export function TableScreen({ tableId }: { tableId: string }) {
             Código {table.joinCode}
           </p>
         </div>
-        {isClosed ? (
-          <Badge tone="neutral">Fechada</Badge>
-        ) : table.status === 'FECHANDO' ? (
-          <Badge tone="info">Fechando…</Badge>
-        ) : (
-          <Badge tone="positive">Aberta</Badge>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          {isClosed ? (
+            <Badge tone="neutral">Fechada</Badge>
+          ) : table.status === 'FECHANDO' ? (
+            <Badge tone="info">Fechando…</Badge>
+          ) : (
+            <Badge tone="positive">Aberta</Badge>
+          )}
+          {view.isEditable && (
+            <Button size="sm" variant="secondary" onClick={() => setInviteOpen(true)}>
+              Convidar
+            </Button>
+          )}
+        </div>
       </header>
 
       <section>
@@ -250,6 +259,13 @@ export function TableScreen({ tableId }: { tableId: string }) {
         onClose={() => setClosingOpen(false)}
         tableId={tableId}
         view={view}
+      />
+
+      <InviteSheet
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        tableName={table.name}
+        joinCode={table.joinCode}
       />
     </main>
   )

@@ -16,6 +16,8 @@ export { Tag } from '@/ui/design-system/components/Tag'
 export { Avatar } from '@/ui/design-system/components/Avatar'
 export { Dialog } from '@/ui/design-system/components/Dialog'
 export { BottomSheet } from '@/ui/design-system/components/BottomSheet'
+export { QrCode } from '@/ui/design-system/components/QrCode'
+export type { QrCodeProps } from '@/ui/design-system/components/QrCode'
 export {
   ToastProvider,
   useToast,
