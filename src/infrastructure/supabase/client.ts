@@ -34,6 +34,22 @@ export function getSupabaseClient(): AppSupabaseClient {
 }
 
 /**
+ * Client preguiçoso: o client real só é criado no PRIMEIRO acesso a uma
+ * propriedade (sempre client-side, numa interação). Assim a composição
+ * pode ser construída durante o prerender/SSR sem exigir env do Supabase
+ * — páginas client não executam queries no servidor.
+ */
+export function lazySupabaseClient(): AppSupabaseClient {
+  return new Proxy({} as AppSupabaseClient, {
+    get(_target, prop, receiver) {
+      const real = getSupabaseClient() as unknown as Record<string, unknown>
+      const value = Reflect.get(real, prop, receiver)
+      return typeof value === 'function' ? value.bind(real) : value
+    },
+  })
+}
+
+/**
  * Garante identidade anônima do dispositivo (ADR-006): reutiliza a
  * sessão persistida ou cria um usuário anônimo — invisível ao usuário.
  */

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
-import { ToastProvider } from '@/ui/design-system'
+import { AppProviders } from '@/ui/providers/AppProviders'
 
 export const metadata: Metadata = {
   title: 'ContaFácil',
@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <ToastProvider>{children}</ToastProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   )

@@ -11,8 +11,8 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | 04 | Backend | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 05 | Realtime | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 06 | Design System | ✅ Aprovada (em bloco) | 15/07/2026 |
-| 07 | Fluxo da Mesa | 🔄 Em andamento | — |
-| 08 | Distribuição | ⬜ Não iniciada | — |
+| 07 | Fluxo da Mesa | ✅ Aprovada (em bloco) | 15/07/2026 |
+| 08 | Distribuição | 🔄 Em andamento | — |
 | 09 | Fechamento | ⬜ Não iniciada | — |
 | 10 | PIX | ⬜ Não iniciada | — |
 | 11 | Scanner NFC-e | ⬜ Não iniciada | — |
