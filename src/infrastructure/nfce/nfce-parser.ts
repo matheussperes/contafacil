@@ -9,23 +9,21 @@
  * converte tudo para inteiros (centavos / mili-unidades).
  *
  * Desconto: algumas notas mostram o líquido por item (`Vl. Total` já
- * descontado, ou uma linha própria "Desconto sobre item"). A maioria das
- * páginas de consulta, porém, só informa um desconto ÚNICO e AGREGADO no
- * resumo da nota ("Descontos R$"), sem dizer qual item foi promocional —
- * layout confirmado numa nota real (Carrefour/SP): cada item mostra
- * "Vl. Total" cheio (qtde×unitário, sem desconto algum) e só o resumo diz
- * "Descontos R$ 6,39". Nesse caso, sem como saber qual item específico
- * teve a promoção, o valor é **rateado proporcionalmente entre todos os
- * itens** pelo mesmo método do maior resto usado no resto do app — o que
- * importa para dividir a conta é que a soma bata com o que foi pago, não
- * qual item específico ficou mais barato.
+ * descontado, ou uma linha própria "Desconto sobre item") — nesses casos
+ * o parser já aplica o desconto ao item certo. A maioria das páginas de
+ * consulta, porém, só informa um desconto ÚNICO e AGREGADO no resumo da
+ * nota ("Descontos R$"), sem dizer qual item foi promocional — layout
+ * confirmado numa nota real (Carrefour/SP). Rateá-lo automaticamente
+ * entre todos os itens (tentativa anterior) bate a soma, mas cobra de
+ * quem não consumiu o item promocional também — quem revisa a nota é
+ * quem sabe qual item teve o desconto. Por isso o parser só **expõe**
+ * esse valor (`noteDiscountCents`, sem aplicar a nenhum item); a
+ * distribuição manual acontece na tela de revisão (ScannerSheet).
  */
 import type {
   NfceParseResult,
   ParsedNfceItem,
 } from '@/application/nfce/nfce-types'
-import { allocate } from '@/domain/calculator/allocate'
-import { cents } from '@/domain/money/cents'
 
 /** "1.234,56" | "1234.56" | "12,5" → centavos inteiros. */
 export function moneyToCents(raw: string): number | null {
@@ -110,33 +108,6 @@ function applyPerItemDiscount(item: ParsedNfceItem, discountCents: number): Pars
   return net >= 1 ? { ...item, totalCents: net } : item
 }
 
-function grossTotalCents(item: ParsedNfceItem): number {
-  return Math.round((item.quantityMilli * item.unitPriceCents) / 1000)
-}
-
-/**
- * Rateia um desconto agregado (sem item específico atribuído) entre
- * todos os itens, proporcional ao valor bruto de cada um — método do
- * maior resto (ADR-008), a mesma primitiva de conservação usada em todo
- * o resto do app. Nunca deixa um item com total menor que 1 centavo.
- */
-function distributeAggregateDiscount(
-  items: readonly ParsedNfceItem[],
-  discountCents: number,
-): ParsedNfceItem[] {
-  const grossValues = items.map(grossTotalCents)
-  const grossSum = grossValues.reduce((a, b) => a + b, 0)
-  if (discountCents <= 0 || discountCents >= grossSum) return [...items]
-
-  const shares = allocate(cents(discountCents), grossValues)
-  return items.map((item, i) => {
-    const gross = grossValues[i] ?? 0
-    const share = shares[i] ?? 0
-    const net = gross - share
-    return net >= 1 ? { ...item, totalCents: net } : item
-  })
-}
-
 /**
  * Parser principal. Reconhece dois formatos comuns:
  * 1) linhas de tabela `<tr>` com células de descrição/qtde/unitário;
@@ -147,7 +118,7 @@ export function parseNfceHtml(html: string): NfceParseResult {
     return { ok: false, reason: 'FORMATO_DESCONHECIDO' }
   }
 
-  let items: ParsedNfceItem[] = []
+  const items: ParsedNfceItem[] = []
   const uf = extractUf(html)
 
   // Formato 1: tabela de itens. Captura descrição + qtde + unitário.
@@ -253,12 +224,15 @@ export function parseNfceHtml(html: string): NfceParseResult {
   }
 
   // Sem desconto atribuído a item nenhum (caso comum — ver comentário no
-  // topo do arquivo), mas com um total agregado no resumo: rateia.
-  if (!anyPerItemDiscount && aggregateDiscountCents !== null && aggregateDiscountCents > 0) {
-    items = distributeAggregateDiscount(items, aggregateDiscountCents)
-  }
+  // topo do arquivo), mas com um total agregado no resumo: expõe o valor
+  // para a tela de revisão distribuir manualmente entre os itens certos.
+  // Já atribuído por item: ignora o agregado (evitaria contar 2x).
+  const noteDiscountCents =
+    !anyPerItemDiscount && aggregateDiscountCents !== null && aggregateDiscountCents > 0
+      ? aggregateDiscountCents
+      : null
 
-  return { ok: true, data: { items, uf } }
+  return { ok: true, data: { items, uf, noteDiscountCents } }
 }
 
 /**

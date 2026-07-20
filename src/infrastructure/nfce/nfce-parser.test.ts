@@ -246,58 +246,44 @@ describe('desconto por item (RN-060) — item promocional', () => {
       totalCents: 1278,
     })
 
-    // item seguinte: não recebe o desconto do item anterior nem o
-    // "Descontos R$" agregado do bloco de totais (evita contar 2x)
+    // item seguinte: não recebe o desconto do item anterior — e o
+    // agregado do bloco de totais não é exposto (já tem desconto por
+    // item nessa nota, evita contar 2x)
     expect(r.data.items[2]).toMatchObject({
       quantityMilli: 1000,
       unitPriceCents: 929,
       totalCents: null,
     })
+    expect(r.data.noteDiscountCents).toBeNull()
   })
 
-  it('página real (Carrefour/SP): sem desconto por item, rateia o agregado', () => {
+  it('página real (Carrefour/SP): sem desconto por item, expõe o agregado para distribuição manual', () => {
     const r = parseNfceHtml(fixtureCarrefourReal)
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.data.items).toHaveLength(7)
 
-    // preços de tabela (unitPriceCents) nunca mudam — só o total líquido
+    // nenhum item é tocado — o valor bruto (Vl. Total) permanece como
+    // veio na nota; quem revisa é quem sabe qual item teve a promoção
     expect(r.data.items.map((i) => i.unitPriceCents)).toEqual([
       269, 1079, 929, 1199, 719, 639, 929,
     ])
+    expect(r.data.items.map((i) => i.totalCents)).toEqual([
+      269, 2158, 929, 1199, 719, 1917, 929,
+    ])
 
-    // rateio pelo maior resto (mesmo método do allocate do motor): soma
-    // exata dos totais líquidos = Valor a pagar (74,81), nem 1 centavo
-    // de diferença — é isso que importa para dividir a conta certo.
-    const totals = r.data.items.map((i) => i.totalCents)
-    expect(totals).toEqual([248, 1988, 856, 1105, 662, 1766, 856])
-    const sum = totals.map((t) => t ?? 0).reduce((a, b) => a + b, 0)
-    expect(sum).toBe(7481)
+    // desconto agregado só é exposto, não aplicado a item nenhum
+    expect(r.data.noteDiscountCents).toBe(639)
   })
 
-  it('bloco de totais com &nbsp; e fora de <tr>: ainda encontra e rateia o desconto', () => {
+  it('bloco de totais com &nbsp; e fora de <tr>: ainda encontra o desconto agregado', () => {
     const r = parseNfceHtml(fixtureEntidadesForaDeLinha)
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.data.items).toHaveLength(2)
 
-    // 269 + 1917 = 2186 brutos; desconto 639 rateado por maior resto
-    const totals = r.data.items.map((i) => i.totalCents)
-    expect(totals).toEqual([190, 1357])
-    const sum = totals.map((t) => t ?? 0).reduce((a, b) => a + b, 0)
-    expect(sum).toBe(1547) // Valor a pagar R$: 15,47
-  })
-
-  it('efeito fim a fim: preço a cobrar da batata reflete o rateio', () => {
-    const r = parseNfceHtml(fixtureCarrefourReal)
-    expect(r.ok).toBe(true)
-    if (!r.ok) return
-    const batata = r.data.items[5]
-    expect(batata).toBeDefined()
-    if (!batata) return
-    // preço de tabela 6,39 → líquido do rateio 17,66 (1917−151) para
-    // 3 unidades → efetivo 5,89/un (menor que os 6,39 impressos)
-    expect(batata.totalCents).toBe(1766)
-    expect(effectiveUnitPriceCents(batata)).toBe(589)
+    // itens não são tocados — só o valor agregado é exposto
+    expect(r.data.items.map((i) => i.totalCents)).toEqual([269, 1917])
+    expect(r.data.noteDiscountCents).toBe(639)
   })
 })

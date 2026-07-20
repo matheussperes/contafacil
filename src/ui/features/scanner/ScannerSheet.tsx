@@ -13,11 +13,9 @@ import { QrScanner } from '@/ui/features/scanner/QrScanner'
 import { useServices } from '@/ui/providers/ServicesProvider'
 import { tableKey } from '@/ui/hooks/useTableSnapshot'
 import type { ParsedNfceItem, NfceFailureReason } from '@/application/nfce/nfce-types'
-import { effectiveUnitPriceCents } from '@/infrastructure/nfce/nfce-parser'
+import { effectiveUnitPriceCents, moneyToCents } from '@/infrastructure/nfce/nfce-parser'
 import { errorMessage } from '@/ui/errors/error-messages'
 import { parseMoneyToCents, parseQuantity } from '@/application/validators/inputs'
-import { allocate } from '@/domain/calculator/allocate'
-import { cents } from '@/domain/money/cents'
 
 type Step = 'scan' | 'loading' | 'review'
 
@@ -29,17 +27,18 @@ const FAIL_MSG: Record<NfceFailureReason, string> = {
 }
 
 /**
- * Item em edição na revisão (F3/RN-060). Quantidade e preço ficam como
- * texto — os mesmos formatos aceitos no formulário manual (AddItemSheet)
- * — e são validados/convertidos pelo ItemService no confirm(), único
- * lugar que faz esse parsing (sem duplicar regra aqui).
+ * Item em edição na revisão (F3/RN-060). Quantidade e preço de tabela
+ * ficam como texto — os mesmos formatos aceitos no formulário manual
+ * (AddItemSheet) — e são validados/convertidos pelo ItemService no
+ * confirm(). `itemDiscount` é o desconto atribuído a ESSE item (não por
+ * unidade, o valor total da linha) — quem revisa decide qual item teve a
+ * promoção, o app não presume (ver comentário no topo do nfce-parser).
  */
 interface DraftItem {
   description: string
   quantity: string
   unitPrice: string
-  /** true quando o preço já veio ajustado por desconto da nota */
-  discounted: boolean
+  itemDiscount: string
 }
 
 /** 1590 → "15,90" — formato aceito por parseMoneyToCents (decimal com vírgula). */
@@ -48,19 +47,22 @@ function centsToInputValue(cents: number): string {
 }
 
 function toDraft(item: ParsedNfceItem): DraftItem {
-  const effective = effectiveUnitPriceCents(item)
+  const gross = Math.round((item.quantityMilli * item.unitPriceCents) / 1000)
+  const discount = item.totalCents !== null ? Math.max(0, gross - item.totalCents) : 0
   return {
     description: item.description,
     quantity: formatQuantityMilli(item.quantityMilli),
-    unitPrice: centsToInputValue(effective),
-    discounted: effective !== item.unitPriceCents,
+    unitPrice: centsToInputValue(item.unitPriceCents),
+    itemDiscount: discount > 0 ? centsToInputValue(discount) : '',
   }
 }
 
 // Scanner NFC-e (F11): scan → parser → revisão → mesa. Qualquer falha cai
 // na entrada manual (RN-061) — nunca há beco sem saída. A revisão permite
-// editar descrição, quantidade e preço (RN-060: "revê e edita"), inclusive
-// para corrigir descontos que o parser não tenha identificado sozinho.
+// editar descrição, quantidade, preço de tabela e o desconto de cada item
+// (RN-060: "revê e edita") — inclusive quando a nota só informa um
+// desconto agregado (sem dizer qual item foi a promoção): quem revisa
+// distribui esse valor manualmente, item por item.
 export function ScannerSheet({
   open,
   onClose,
@@ -79,7 +81,7 @@ export function ScannerSheet({
   const [items, setItems] = useState<DraftItem[]>([])
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [noteDiscount, setNoteDiscount] = useState('')
+  const [noteDiscountTotal, setNoteDiscountTotal] = useState('')
 
   async function handleDetected(text: string) {
     setStep('loading')
@@ -91,6 +93,11 @@ export function ScannerSheet({
       return
     }
     setItems(result.data.items.map(toDraft))
+    setNoteDiscountTotal(
+      result.data.noteDiscountCents !== null
+        ? centsToInputValue(result.data.noteDiscountCents)
+        : '',
+    )
     setStep('review')
   }
 
@@ -104,50 +111,6 @@ export function ScannerSheet({
     setItems((prev) => prev.filter((_, i) => i !== index))
   }
 
-  /**
-   * Rede de segurança quando o parser não identifica o desconto sozinho
-   * (a nota do usuário não bate no formato que o parser reconhece): quem
-   * revisa digita o valor total do desconto impresso na nota, e ele é
-   * rateado entre os itens listados pelo mesmo método (`allocate`) usado
-   * automaticamente — trata os preços atuais como o bruto a ratear.
-   */
-  function applyNoteDiscount(discountCents: number) {
-    setItems((prev) => {
-      const grossTotals = prev.map((it) => {
-        try {
-          const qty = parseQuantity(it.quantity)
-          const price = parseMoneyToCents(it.unitPrice)
-          return Math.round((qty * price) / 1000)
-        } catch {
-          return 0
-        }
-      })
-      const grossSum = grossTotals.reduce((a, b) => a + b, 0)
-      if (discountCents <= 0 || grossSum <= 0 || discountCents >= grossSum) {
-        toast.show('Desconto inválido para os itens atuais', 'danger')
-        return prev
-      }
-      const shares = allocate(cents(discountCents), grossTotals)
-      return prev.map((it, i) => {
-        const gross = grossTotals[i] ?? 0
-        const share = shares[i] ?? 0
-        const net = gross - share
-        if (net < 1) return it
-        let qtyMilli: number
-        try {
-          qtyMilli = parseQuantity(it.quantity)
-        } catch {
-          return it
-        }
-        return {
-          ...it,
-          unitPrice: centsToInputValue(Math.max(1, Math.round((net * 1000) / qtyMilli))),
-          discounted: true,
-        }
-      })
-    })
-  }
-
   async function confirm() {
     if (items.length === 0) {
       onClose()
@@ -155,8 +118,28 @@ export function ScannerSheet({
     }
     setBusy(true)
     try {
+      const resolved = items.map((it) => {
+        const discountCents = moneyToCents(it.itemDiscount) ?? 0
+        if (discountCents <= 0) return it
+        let qtyMilli: number
+        let grossUnitPriceCents: number
+        try {
+          qtyMilli = parseQuantity(it.quantity)
+          grossUnitPriceCents = parseMoneyToCents(it.unitPrice)
+        } catch {
+          return it // deixa o ItemService validar e reportar o erro certo
+        }
+        const grossTotal = Math.round((qtyMilli * grossUnitPriceCents) / 1000)
+        const netTotal = Math.max(1, grossTotal - discountCents)
+        const effective = effectiveUnitPriceCents({
+          quantityMilli: qtyMilli,
+          unitPriceCents: grossUnitPriceCents,
+          totalCents: netTotal,
+        })
+        return { ...it, unitPrice: centsToInputValue(effective) }
+      })
       await services.item.addMany(
-        items.map((it) => ({
+        resolved.map((it) => ({
           tableId,
           description: it.description,
           quantity: it.quantity,
@@ -180,8 +163,15 @@ export function ScannerSheet({
     setStep('scan')
     setItems([])
     setFailure(null)
-    setNoteDiscount('')
+    setNoteDiscountTotal('')
   }
+
+  const noteDiscountTotalCents = moneyToCents(noteDiscountTotal) ?? 0
+  const assignedDiscountCents = items.reduce(
+    (sum, it) => sum + (moneyToCents(it.itemDiscount) ?? 0),
+    0,
+  )
+  const remainingDiscountCents = noteDiscountTotalCents - assignedDiscountCents
 
   return (
     <BottomSheet
@@ -220,9 +210,9 @@ export function ScannerSheet({
       {step === 'review' && (
         <div className="flex flex-col gap-3">
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Confira e ajuste os itens antes de adicionar à mesa. Preços com
-            desconto na nota já vêm ajustados — mas você pode corrigir
-            qualquer valor à mão.
+            Confira e ajuste os itens antes de adicionar à mesa. Se a nota
+            teve desconto, informe o total abaixo e distribua nos itens
+            certos — só quem estava na mesa sabe qual foi a promoção.
           </p>
           <ul className="flex flex-col gap-2">
             {items.map((it, i) => (
@@ -264,11 +254,14 @@ export function ScannerSheet({
                     className="flex-1"
                   />
                 </div>
-                {it.discounted && (
-                  <p className="text-[length:var(--text-xs)] text-[var(--color-positive)]">
-                    Preço ajustado pelo desconto da nota
-                  </p>
-                )}
+                <Input
+                  aria-label={`Desconto em ${it.description}`}
+                  prefix="R$"
+                  inputMode="decimal"
+                  placeholder="Desconto (opcional)"
+                  value={it.itemDiscount}
+                  onChange={(e) => updateItem(i, { itemDiscount: e.target.value })}
+                />
               </li>
             ))}
           </ul>
@@ -279,39 +272,30 @@ export function ScannerSheet({
           )}
           {items.length > 0 && (
             <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-dashed p-2">
-              <p className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
-                A nota teve desconto e não apareceu nos preços acima? Digite o
-                valor total do desconto — ele é rateado entre os itens
-                listados.
+              <Input
+                label="Desconto total da nota"
+                prefix="R$"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={noteDiscountTotal}
+                onChange={(e) => setNoteDiscountTotal(e.target.value)}
+              />
+              <p
+                className={
+                  remainingDiscountCents === 0
+                    ? 'text-[length:var(--text-sm)] font-medium text-[var(--color-positive)]'
+                    : remainingDiscountCents < 0
+                      ? 'text-[length:var(--text-sm)] font-medium text-[var(--color-danger)]'
+                      : 'text-[length:var(--text-sm)] font-medium text-[var(--color-text)]'
+                }
+              >
+                Desconto a distribuir: R$ {centsToInputValue(remainingDiscountCents)}
               </p>
-              <div className="flex items-center gap-2">
-                <Input
-                  aria-label="Desconto total da nota"
-                  prefix="R$"
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  value={noteDiscount}
-                  onChange={(e) => setNoteDiscount(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    let discountCents: number
-                    try {
-                      discountCents = parseMoneyToCents(noteDiscount)
-                    } catch {
-                      toast.show('Desconto inválido', 'danger')
-                      return
-                    }
-                    applyNoteDiscount(discountCents)
-                    setNoteDiscount('')
-                  }}
-                >
-                  Ratear desconto
-                </Button>
-              </div>
+              {remainingDiscountCents < 0 && (
+                <p className="text-[length:var(--text-xs)] text-[var(--color-danger)]">
+                  Você distribuiu mais desconto do que o total da nota.
+                </p>
+              )}
             </div>
           )}
           <div className="flex gap-2">

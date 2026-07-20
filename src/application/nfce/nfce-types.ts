@@ -17,6 +17,13 @@ export interface ParsedNfce {
   items: ParsedNfceItem[]
   /** UF de origem, quando identificável (para logs sem PII) */
   uf: string | null
+  /**
+   * Desconto agregado da nota (bloco de totais), sem item específico
+   * atribuído — só a pessoa que revisa sabe qual item foi a promoção.
+   * `null` quando a nota não tem desconto agregado, ou quando o desconto
+   * já veio atribuído por item (evita contar duas vezes).
+   */
+  noteDiscountCents: number | null
 }
 
 export type NfceParseResult =

@@ -219,6 +219,42 @@ robustez, com os números conferidos à mão: soma líquida bate exata com o
 "Valor a pagar" também nesse layout alternativo. Total do projeto: 134
 testes verdes.
 
+## Correção pós-deploy 5: rateio automático era injusto — passou a ser manual
+
+O rateio proporcional automático (correção 3) resolvia a matemática —
+soma batendo com o valor pago — mas errava a divisão entre pessoas: um
+desconto de um item que só uma pessoa comprou (ex.: uma promoção pontual)
+acabava sendo cobrado de todo mundo à mesa, um pouco de cada item,
+mesmo de quem nunca consumiu o item promocional. Quem sabe qual item
+teve a promoção é quem estava na mesa — não o parser.
+
+Mudança de modelo: o parser **para de aplicar** o desconto agregado a
+qualquer item — só expõe o valor total (`ParsedNfce.noteDiscountCents`).
+A tela de revisão passa a ter:
+
+- Um campo **"Desconto total da nota"**, pré-preenchido com o valor que o
+  parser encontrou (editável, para os casos em que o parser não achar
+  nada ou achar errado).
+- Um campo **"Desconto"** em cada item (opcional, valor da linha inteira,
+  não por unidade) — quem revisa atribui o desconto ao item certo.
+- Uma linha **"Desconto a distribuir"**, calculada ao vivo (total da nota
+  − soma dos descontos já atribuídos aos itens) — mostra quanto ainda
+  falta lançar, chegando a R$ 0,00 quando tudo foi atribuído
+  corretamente. Fica vermelha se a soma dos itens passar do total (erro
+  de digitação).
+
+No `confirm()`, o desconto de cada item é convertido para o preço efetivo
+da mesma forma de sempre (`effectiveUnitPriceCents`, sobre o total
+líquido da linha) — só que agora o "total líquido" vem do que a pessoa
+atribuiu manualmente, não de um rateio automático.
+
+Testes do parser atualizados: as duas fixtures que antes verificavam o
+rateio automático (Carrefour real e totais com `&nbsp;` fora de `<tr>`)
+agora verificam que os itens permanecem intactos (bruto) e que
+`noteDiscountCents` é exposto corretamente. Total do projeto: 133 testes
+verdes (o rateio automático e seus 2 testes específicos foram removidos
+junto com a função `distributeAggregateDiscount`, que não existe mais).
+
 ## Pendência de ambiente
 
 Ler o QR de uma NFC-e real com a câmera e bater numa SEFAZ ao vivo exige
