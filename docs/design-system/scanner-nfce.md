@@ -146,6 +146,44 @@ navegador** (não o papel) para ver o texto exato — a tela de revisão
 editável do scanner continua sendo a rede de segurança garantida
 enquanto isso.
 
+## Correção pós-deploy 3: desconto agregado sem item específico (caso real confirmado)
+
+O usuário enviou um print da **página real** que o QR abre (Portal
+NFC-e/SEFAZ-SP, nota Carrefour) — a primeira evidência direta do HTML.
+Ela revelou algo diferente das duas correções anteriores: **nenhum item
+individual mostra desconto**. Cada linha de item tem "Vl. Total" sempre
+**bruto** (qtde×unitário, sem redução nenhuma — a batata mostra
+`3 × 6,39 = 19,17`, exatamente o valor cheio). O desconto de R$ 6,39
+aparece **uma única vez**, no resumo agregado da nota ("Descontos R$"),
+sem qualquer indicação de qual item foi a promoção.
+
+Como não há como saber, a partir dessa página, qual item específico teve
+o desconto, a solução deixou de ser "achar o item certo" e passou a ser
+**ratear o valor entre todos os itens**, proporcional ao valor bruto de
+cada um — usando a mesma função `allocate` (método do maior resto,
+ADR-008) que já é a primitiva de divisão de todo o app. Isso garante a
+propriedade que realmente importa para dividir a conta: a soma dos itens
+importados bate, centavo a centavo, com o que foi de fato pago
+("Valor a pagar R$") — mesmo sem saber qual item exato estava em
+promoção.
+
+- `AGGREGATE_DISCOUNT_LINE` captura o "Descontos R$" do bloco de totais.
+- `distributeAggregateDiscount` usa `allocate()` do motor (importado de
+  `domain/calculator` — infraestrutura pode depender de domínio, ADR-004)
+  para ratear com a mesma garantia de conservação usada em toda divisão
+  de conta do produto.
+- Só roda quando **nenhum** desconto específico de item foi detectado
+  pelas correções anteriores (flag `anyPerItemDiscount`) — evita contar o
+  mesmo desconto duas vezes num layout híbrido.
+- Corrigido também: `TOTALS_SECTION_MARKER` esperava "Qtde total de
+  itens", mas a página real usa "**Qtd**. total de itens" (sem o "e").
+
+Novo teste replica a página inteira (7 itens + bloco de totais, com os
+valores reais da nota) e confirma, com os números conferidos à mão: soma
+líquida = R$ 74,81 exata, preços de tabela preservados, e o preço efetivo
+da batata cai de R$ 6,39 para R$ 5,89/unidade após o rateio. Total do
+projeto: 133 testes verdes.
+
 ## Pendência de ambiente
 
 Ler o QR de uma NFC-e real com a câmera e bater numa SEFAZ ao vivo exige

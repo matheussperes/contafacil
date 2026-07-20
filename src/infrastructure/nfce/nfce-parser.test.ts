@@ -58,6 +58,29 @@ const fixtureDescontoEmLinhaPropria = `
 </table>
 </body></html>`
 
+// Página REAL da SEFAZ/SP (Carrefour) confirmada pelo usuário: cada item
+// mostra "Vl. Total" sempre cheio (qtde×unitário, nenhum item indica
+// desconto algum); o desconto só aparece UMA vez, agregado, no resumo
+// final ("Descontos R$"), sem dizer qual item foi promocional.
+const fixtureCarrefourReal = `
+<html><body>
+<div>CARREFOUR COMERCIO E INDUSTRIA LTDA</div>
+<div>Estado: SP</div>
+<table>
+  <tr><td>BALA GELAT FINI TUBE (Código: 3097358)</td><td>Qtde.:1 UN: un Vl. Unit.: 2,69</td><td>Vl. Total 2,69</td></tr>
+  <tr><td>MONSTER ULTRA FIESTA (Código: 3632296)</td><td>Qtde.:2 UN: un Vl. Unit.: 10,79</td><td>Vl. Total 21,58</td></tr>
+  <tr><td>BALA FINI DENT 80G (Código: 4222687)</td><td>Qtde.:1 UN: un Vl. Unit.: 9,29</td><td>Vl. Total 9,29</td></tr>
+  <tr><td>UVA CL S SE CRF 500G (Código: 5141966)</td><td>Qtde.:1 UN: un Vl. Unit.: 11,99</td><td>Vl. Total 11,99</td></tr>
+  <tr><td>CERV LAGER CORONA EX (Código: 5760593)</td><td>Qtde.:1 UN: un Vl. Unit.: 7,19</td><td>Vl. Total 7,19</td></tr>
+  <tr><td>BATATA OND CEB SALSA (Código: 6574262)</td><td>Qtde.:3 UN: un Vl. Unit.: 6,39</td><td>Vl. Total 19,17</td></tr>
+  <tr><td>BALA FINI MI CIT 80G (Código: 9269320)</td><td>Qtde.:1 UN: un Vl. Unit.: 9,29</td><td>Vl. Total 9,29</td></tr>
+  <tr><td>Qtd. total de itens:</td><td>7</td></tr>
+  <tr><td>Valor total R$:</td><td>81,20</td></tr>
+  <tr><td>Descontos R$:</td><td>6,39</td></tr>
+  <tr><td>Valor a pagar R$:</td><td>74,81</td></tr>
+</table>
+</body></html>`
+
 describe('conversões (sem float)', () => {
   it('moneyToCents entende padrão BR e US', () => {
     expect(moneyToCents('15,90')).toBe(1590)
@@ -212,5 +235,38 @@ describe('desconto por item (RN-060) — item promocional', () => {
       unitPriceCents: 929,
       totalCents: null,
     })
+  })
+
+  it('página real (Carrefour/SP): sem desconto por item, rateia o agregado', () => {
+    const r = parseNfceHtml(fixtureCarrefourReal)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.data.items).toHaveLength(7)
+
+    // preços de tabela (unitPriceCents) nunca mudam — só o total líquido
+    expect(r.data.items.map((i) => i.unitPriceCents)).toEqual([
+      269, 1079, 929, 1199, 719, 639, 929,
+    ])
+
+    // rateio pelo maior resto (mesmo método do allocate do motor): soma
+    // exata dos totais líquidos = Valor a pagar (74,81), nem 1 centavo
+    // de diferença — é isso que importa para dividir a conta certo.
+    const totals = r.data.items.map((i) => i.totalCents)
+    expect(totals).toEqual([248, 1988, 856, 1105, 662, 1766, 856])
+    const sum = totals.map((t) => t ?? 0).reduce((a, b) => a + b, 0)
+    expect(sum).toBe(7481)
+  })
+
+  it('efeito fim a fim: preço a cobrar da batata reflete o rateio', () => {
+    const r = parseNfceHtml(fixtureCarrefourReal)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const batata = r.data.items[5]
+    expect(batata).toBeDefined()
+    if (!batata) return
+    // preço de tabela 6,39 → líquido do rateio 17,66 (1917−151) para
+    // 3 unidades → efetivo 5,89/un (menor que os 6,39 impressos)
+    expect(batata.totalCents).toBe(1766)
+    expect(effectiveUnitPriceCents(batata)).toBe(589)
   })
 })

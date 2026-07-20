@@ -8,16 +8,24 @@
  * tabela de produtos por padrões comuns (qtde/unitário/descrição) e
  * converte tudo para inteiros (centavos / mili-unidades).
  *
- * Desconto por item: a nota às vezes já mostra "Vl. Total" líquido
- * (após desconto promocional) e/ou uma linha "Desconto R$ X". Quando
- * algum dos dois aparece, `totalCents` reflete o valor líquido da linha
- * — é ele, e não `unitPriceCents` (o preço de tabela impresso), que deve
- * virar o preço a cobrar (ver `effectiveUnitPriceCents`).
+ * Desconto: algumas notas mostram o líquido por item (`Vl. Total` já
+ * descontado, ou uma linha própria "Desconto sobre item"). A maioria das
+ * páginas de consulta, porém, só informa um desconto ÚNICO e AGREGADO no
+ * resumo da nota ("Descontos R$"), sem dizer qual item foi promocional —
+ * layout confirmado numa nota real (Carrefour/SP): cada item mostra
+ * "Vl. Total" cheio (qtde×unitário, sem desconto algum) e só o resumo diz
+ * "Descontos R$ 6,39". Nesse caso, sem como saber qual item específico
+ * teve a promoção, o valor é **rateado proporcionalmente entre todos os
+ * itens** pelo mesmo método do maior resto usado no resto do app — o que
+ * importa para dividir a conta é que a soma bata com o que foi pago, não
+ * qual item específico ficou mais barato.
  */
 import type {
   NfceParseResult,
   ParsedNfceItem,
 } from '@/application/nfce/nfce-types'
+import { allocate } from '@/domain/calculator/allocate'
+import { cents } from '@/domain/money/cents'
 
 /** "1.234,56" | "1234.56" | "12,5" → centavos inteiros. */
 export function moneyToCents(raw: string): number | null {
@@ -52,7 +60,7 @@ function extractUf(html: string): string | null {
 
 /** Marca o início do bloco de totais da nota (fim da lista de itens). */
 const TOTALS_SECTION_MARKER =
-  /Valor\s+total\s+R\$|Valor\s+a\s+pagar|Qtde\.?\s+total\s+de\s+itens/i
+  /Valor\s+total\s+R\$|Valor\s+a\s+pagar|Qtde?\.?\s+total\s+de\s+itens/i
 
 /**
  * Linha de desconto de UM item, em separado da linha do item (ex.:
@@ -63,11 +71,41 @@ const TOTALS_SECTION_MARKER =
  */
 const PER_ITEM_DISCOUNT_LINE = /Desconto\s+(?:sobre\s+)?(?:o\s+)?item/i
 
+/** Total agregado de descontos da nota, no bloco de totais (não por item). */
+const AGGREGATE_DISCOUNT_LINE = /Descontos?\s*R\$\s*:?\s*([\d.,]+)/i
+
 function applyPerItemDiscount(item: ParsedNfceItem, discountCents: number): ParsedNfceItem {
   const gross =
     item.totalCents ?? Math.round((item.quantityMilli * item.unitPriceCents) / 1000)
   const net = gross - discountCents
   return net >= 1 ? { ...item, totalCents: net } : item
+}
+
+function grossTotalCents(item: ParsedNfceItem): number {
+  return Math.round((item.quantityMilli * item.unitPriceCents) / 1000)
+}
+
+/**
+ * Rateia um desconto agregado (sem item específico atribuído) entre
+ * todos os itens, proporcional ao valor bruto de cada um — método do
+ * maior resto (ADR-008), a mesma primitiva de conservação usada em todo
+ * o resto do app. Nunca deixa um item com total menor que 1 centavo.
+ */
+function distributeAggregateDiscount(
+  items: readonly ParsedNfceItem[],
+  discountCents: number,
+): ParsedNfceItem[] {
+  const grossValues = items.map(grossTotalCents)
+  const grossSum = grossValues.reduce((a, b) => a + b, 0)
+  if (discountCents <= 0 || discountCents >= grossSum) return [...items]
+
+  const shares = allocate(cents(discountCents), grossValues)
+  return items.map((item, i) => {
+    const gross = grossValues[i] ?? 0
+    const share = shares[i] ?? 0
+    const net = gross - share
+    return net >= 1 ? { ...item, totalCents: net } : item
+  })
 }
 
 /**
@@ -80,7 +118,7 @@ export function parseNfceHtml(html: string): NfceParseResult {
     return { ok: false, reason: 'FORMATO_DESCONHECIDO' }
   }
 
-  const items: ParsedNfceItem[] = []
+  let items: ParsedNfceItem[] = []
   const uf = extractUf(html)
 
   // Formato 1: tabela de itens. Captura descrição + qtde + unitário.
@@ -89,6 +127,8 @@ export function parseNfceHtml(html: string): NfceParseResult {
     /<tr[^>]*>[\s\S]*?<\/tr>/gi
   const rows = html.match(rowRegex) ?? []
   let reachedTotals = false
+  let anyPerItemDiscount = false
+  let aggregateDiscountCents: number | null = null
 
   for (const row of rows) {
     const text = row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -97,6 +137,13 @@ export function parseNfceHtml(html: string): NfceParseResult {
       reachedTotals = true
       // segue processando (a própria linha de totais não vira item nem
       // desconto — só marca o fim da lista para as linhas seguintes)
+    }
+
+    if (reachedTotals && aggregateDiscountCents === null) {
+      const aggregateMatch = AGGREGATE_DISCOUNT_LINE.exec(text)
+      if (aggregateMatch) {
+        aggregateDiscountCents = moneyToCents(aggregateMatch[1] ?? '')
+      }
     }
 
     const qty = /Qtde\.?\s*:?\s*([\d.,]+)/i.exec(text)
@@ -119,14 +166,16 @@ export function parseNfceHtml(html: string): NfceParseResult {
           /(?:Vl\.?\s*)?Desconto[s]?\.?\s*(?:R\$)?\s*:?\s*([\d.,]+)/i.exec(text)
         const discountCents = discountRaw ? moneyToCents(discountRaw[1] ?? '') : null
 
-        // Vl. Total, quando a nota o informa, já costuma vir líquido de
-        // desconto — é a fonte preferida. Sem ele, mas com "Desconto"
-        // detectado na mesma linha, deriva o líquido: qtde×unitário − desconto.
+        // "Vl. Total" sozinho NÃO é sinal de desconto: muitas notas o
+        // repetem sempre (bruto, qtde×unitário) em todo item, com ou sem
+        // promoção — só a palavra "Desconto" na própria linha é sinal
+        // real de desconto atribuído a este item específico.
         let totalCents = totalRaw ? moneyToCents(totalRaw[1] ?? '') : null
         if (totalCents === null && discountCents !== null && discountCents > 0) {
           const gross = Math.round((quantityMilli * unitPriceCents) / 1000)
           const net = gross - discountCents
           totalCents = net >= 1 ? net : null
+          if (totalCents !== null) anyPerItemDiscount = true
         }
 
         items.push({
@@ -151,6 +200,7 @@ export function parseNfceHtml(html: string): NfceParseResult {
       const last = items[lastIndex]
       if (discountCents !== null && discountCents > 0 && last !== undefined) {
         items[lastIndex] = applyPerItemDiscount(last, discountCents)
+        anyPerItemDiscount = true
       }
     }
   }
@@ -158,6 +208,13 @@ export function parseNfceHtml(html: string): NfceParseResult {
   if (items.length === 0) {
     return { ok: false, reason: 'SEM_ITENS' }
   }
+
+  // Sem desconto atribuído a item nenhum (caso comum — ver comentário no
+  // topo do arquivo), mas com um total agregado no resumo: rateia.
+  if (!anyPerItemDiscount && aggregateDiscountCents !== null && aggregateDiscountCents > 0) {
+    items = distributeAggregateDiscount(items, aggregateDiscountCents)
+  }
+
   return { ok: true, data: { items, uf } }
 }
 
