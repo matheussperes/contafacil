@@ -9,8 +9,8 @@ Legenda: `⬜ Não iniciada` · `🔄 Em andamento` · `📦 Entregue (aguardand
 | 02 | Banco de Dados | ✅ Aprovada | 13/07/2026 |
 | 03 | Motor Matemático | ✅ Aprovada (em bloco) | 15/07/2026 |
 | 04 | Backend | ✅ Aprovada (em bloco) | 15/07/2026 |
-| 05 | Realtime | 🔄 Em andamento | — |
-| 06 | Design System | ⬜ Não iniciada | — |
+| 05 | Realtime | ✅ Aprovada (em bloco) | 15/07/2026 |
+| 06 | Design System | 🔄 Em andamento | — |
 | 07 | Fluxo da Mesa | ⬜ Não iniciada | — |
 | 08 | Distribuição | ⬜ Não iniciada | — |
 | 09 | Fechamento | ⬜ Não iniciada | — |
