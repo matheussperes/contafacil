@@ -57,6 +57,30 @@ FASE 12  Polimento
 FASE 13  Deploy
 ```
 
+## Estado atual
+
+Todas as 14 fases (00–13) foram entregues. O projeto tem:
+
+- **Domínio puro e testado** (`src/domain`): motor de divisão por maior resto, taxa proporcional, máquinas de estados, payload PIX (BR Code EMV + CRC16) — com testes de propriedade (`fast-check`) provando conservação e determinismo.
+- **Banco Postgres/Supabase** (`supabase/`): 6 tabelas, RLS em todas, triggers de integridade, `close_table` atômico, seed e uma suíte SQL executável.
+- **Aplicação e infraestrutura** (`src/application`, `src/infrastructure`): services, repositories Supabase, realtime idempotente, logging com redação, parser NFC-e.
+- **Interface** (`src/ui`, `src/app`): design system, fluxo da mesa, distribuição, fechamento, PIX e scanner — PWA instalável com offline.
+- **Operação** (`.github/`, `vercel.json`, `docs/operacao/`): CI (app + banco), config de deploy e runbooks.
+
+### Rodar localmente
+
+```bash
+pnpm install
+pnpm test         # ~119 testes (domínio, aplicação, infra, componentes)
+pnpm typecheck && pnpm lint && pnpm build
+
+# banco, sem Docker (Postgres local ≥ 15):
+supabase/tests/run-local.sh
+
+# app (precisa das envs do Supabase — ver .env.example):
+pnpm dev
+```
+
 ## Regra de ouro
 
 Uma fase só começa depois que a anterior foi **entregue, validada (build + testes + lint) e aprovada**. Nenhuma fase cria funcionalidade fora do seu escopo.
