@@ -15,10 +15,14 @@ import {
   useToast,
 } from '@/ui/design-system'
 import { ZERO_CENTS } from '@/domain/money/cents'
+import { itemCoverage } from '@/domain/calculator/coverage'
+import type { Item } from '@/domain/entities/types'
 import { useServices } from '@/ui/providers/ServicesProvider'
 import { useTableSnapshot } from '@/ui/hooks/useTableSnapshot'
 import { useTableView } from '@/ui/hooks/useTableView'
 import { AddItemSheet } from '@/ui/features/table/AddItemSheet'
+import { DistributionSheet } from '@/ui/features/distribution/DistributionSheet'
+import { ParticipantSummary } from '@/ui/features/distribution/ParticipantSummary'
 import { errorMessage } from '@/ui/errors/error-messages'
 
 // Mesa (F3): tela viva — participantes, itens e resumo em tempo real.
@@ -31,6 +35,7 @@ export function TableScreen({ tableId }: { tableId: string }) {
   const session = services.table.session(tableId)
   const view = useTableView(query.data, session?.participantId ?? null)
   const [addOpen, setAddOpen] = useState(false)
+  const [distItem, setDistItem] = useState<Item | null>(null)
 
   if (query.isLoading) {
     return (
@@ -119,22 +124,39 @@ export function TableScreen({ tableId }: { tableId: string }) {
           />
         ) : (
           <div className="flex flex-col gap-2">
-            {items.map((item) => (
-              <Card key={item.id} className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">{item.description}</p>
-                  <p className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
-                    {formatQuantityMilli(item.quantityMilli)} ×{' '}
-                    {formatCents(item.unitPriceCents)}
-                    {item.source === 'NFCE' && ' · nota'}
-                  </p>
-                </div>
-                <span className="font-medium">{formatCents(item.totalCents)}</span>
-              </Card>
-            ))}
+            {items.map((item) => {
+              const cov = itemCoverage(item, view.assignments)
+              return (
+                <Card
+                  key={item.id}
+                  interactive={canEdit}
+                  onClick={canEdit ? () => setDistItem(item) : undefined}
+                  className="flex items-center justify-between"
+                >
+                  <div>
+                    <p className="font-medium">{item.description}</p>
+                    <p className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+                      {formatQuantityMilli(item.quantityMilli)} ×{' '}
+                      {formatCents(item.unitPriceCents)}
+                      {item.source === 'NFCE' && ' · nota'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {cov.status === 'VAZIO' && <Badge tone="warning">sem dono</Badge>}
+                    {cov.status === 'PARCIAL' && <Badge tone="warning">parcial</Badge>}
+                    {cov.status === 'COMPLETO' && <Badge tone="positive">dividido</Badge>}
+                    <span className="font-medium">{formatCents(item.totalCents)}</span>
+                  </div>
+                </Card>
+              )
+            })}
           </div>
         )}
       </section>
+
+      {items.length > 0 && (
+        <ParticipantSummary view={view} />
+      )}
 
       {totals.unassignedValueCents > 0 && (
         <Badge tone="warning">
@@ -177,6 +199,17 @@ export function TableScreen({ tableId }: { tableId: string }) {
           onClose={() => setAddOpen(false)}
           tableId={tableId}
           createdBy={me.id}
+        />
+      )}
+
+      {distItem && (
+        <DistributionSheet
+          open={distItem !== null}
+          onClose={() => setDistItem(null)}
+          tableId={tableId}
+          item={distItem}
+          participants={participants}
+          existing={itemCoverage(distItem, view.assignments).assignment}
         />
       )}
     </main>
